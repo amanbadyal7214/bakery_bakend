@@ -1,0 +1,216 @@
+const fs = require('fs');
+const path = require('path');
+const sharp = require('sharp');
+const Product = require('../Models/Product');
+
+// helper: save data URL (base64) image to uploads and return web path
+const saveBase64Image = async (dataUrl) => {
+  if (!dataUrl || typeof dataUrl !== 'string') return dataUrl;
+  const m = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (!m) return dataUrl;
+  const mime = m[1];
+  const b64 = m[2];
+  // convert image buffer to webp using sharp for consistent storage
+  const buffer = Buffer.from(b64, 'base64');
+  const uploadDir = path.join(__dirname, '..', 'uploads');
+  await fs.promises.mkdir(uploadDir, { recursive: true });
+  const filename = `${Date.now()}-${Math.round(Math.random()*1e9)}.webp`;
+  const filePath = path.join(uploadDir, filename);
+  try {
+    const webpBuffer = await sharp(buffer).webp({ quality: 80 }).toBuffer();
+    await fs.promises.writeFile(filePath, webpBuffer);
+    return `/uploads/${filename}`;
+  } catch (e) {
+    // fallback: write original buffer with detected extension if sharp fails
+    const ext = (mime.split('/')[1] || 'png').split('+')[0];
+    const fallbackName = `${Date.now()}-${Math.round(Math.random()*1e9)}.${ext}`;
+    const fallbackPath = path.join(uploadDir, fallbackName);
+    await fs.promises.writeFile(fallbackPath, buffer);
+    return `/uploads/${fallbackName}`;
+  }
+};
+
+exports.listProducts = async (req, res, next) => {
+  try {
+    const { page = 1, limit = 20, search, category, minPrice, maxPrice, rating } = req.query;
+    const filter = {};
+    if (search) filter.name = { $regex: search, $options: 'i' };
+    if (category) filter.category = category;
+    if (minPrice || maxPrice) filter.price = {};
+    if (minPrice) filter.price.$gte = Number(minPrice);
+    if (maxPrice) filter.price.$lte = Number(maxPrice);
+    if (rating) filter.rating = { $gte: Number(rating) };
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const total = await Product.countDocuments(filter);
+    const products = await Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit));
+
+    res.json({ data: products, meta: { total, page: Number(page), limit: Number(limit) } });
+  } catch (err) {
+    console.error('productController.listProducts error:', err);
+    next(err);
+  }
+};
+
+exports.getProduct = async (req, res, next) => {
+  try {
+    const p = await Product.findById(req.params.id);
+    if (!p) return res.status(404).json({ error: 'Product not found' });
+    // return single product wrapped in { data: ... }
+    res.json({ data: p });
+  } catch (err) {
+    console.error('productController.getProduct error:', err);
+    next(err);
+  }
+};
+
+exports.createProduct = async (req, res, next) => {
+  try {
+    const payload = { ...(req.body || {}) };
+
+    // Normalize common fields so backend stores exactly what was added from frontend
+    const ensureArray = (val) => {
+      if (val === undefined || val === null) return [];
+      if (Array.isArray(val)) return val.map(String);
+      // if comma-separated string, split; otherwise wrap single value
+      if (typeof val === 'string') {
+        // try comma split if contains comma
+        if (val.includes(',')) return val.split(',').map(s => s.trim()).filter(Boolean);
+        return val === '' ? [] : [val];
+      }
+      return [String(val)];
+    };
+
+    // Coerce specific fields
+    payload.category = payload.category !== undefined && payload.category !== null ? String(payload.category) : '';
+    payload.flavor = ensureArray(payload.flavor);
+    payload.type = ensureArray(payload.type);
+    payload.occasion = ensureArray(payload.occasion);
+    payload.weight = ensureArray(payload.weight);
+    payload.delivery = ensureArray(payload.delivery);
+    payload.dietary = ensureArray(payload.dietary);
+    payload.ingredients = ensureArray(payload.ingredients);
+
+    // Coerce shape/theme to string if arrays were sent (frontend can send single-value arrays)
+    if (Array.isArray(payload.shape)) payload.shape = payload.shape.length ? String(payload.shape[0]) : '';
+    else if (payload.shape === undefined || payload.shape === null) payload.shape = '';
+    if (Array.isArray(payload.theme)) payload.theme = payload.theme.length ? String(payload.theme[0]) : '';
+    else if (payload.theme === undefined || payload.theme === null) payload.theme = '';
+
+    // Handle primary image
+    if (payload.img && typeof payload.img === 'string' && payload.img.startsWith('data:')) {
+      try {
+        payload.imgBase64 = payload.img;
+        payload.img = await saveBase64Image(payload.img);
+      } catch (e) { console.warn('Failed to save primary image', e); }
+    }
+
+    // Handle multiple images array
+    if (payload.images && Array.isArray(payload.images)) {
+      const processedImages = [];
+      for (const item of payload.images) {
+        if (item && item.base64 && typeof item.base64 === 'string' && item.base64.startsWith('data:')) {
+          try {
+            const url = await saveBase64Image(item.base64);
+            processedImages.push({ url, base64: item.base64 });
+          } catch (e) { console.warn('Failed to save gallery image', e); }
+        } else if (item && (item.url || item.base64)) {
+          // preserve provided url/base64 fields
+          processedImages.push({ url: item.url || null, base64: item.base64 || null });
+        }
+      }
+      payload.images = processedImages;
+    }
+
+    const p = new Product(payload);
+    await p.save();
+    res.status(201).json({ data: p });
+  } catch (err) {
+    console.error('productController.createProduct error:', err);
+    next(err);
+  }
+};
+
+exports.updateProduct = async (req, res, next) => {
+  try {
+    const existing = await Product.findById(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Product not found' });
+
+    const payload = { ...(req.body || {}) };
+
+    // Normalize common fields on update as well
+    const ensureArray = (val) => {
+      if (val === undefined || val === null) return [];
+      if (Array.isArray(val)) return val.map(String);
+      if (typeof val === 'string') {
+        if (val.includes(',')) return val.split(',').map(s => s.trim()).filter(Boolean);
+        return val === '' ? [] : [val];
+      }
+      return [String(val)];
+    };
+
+    payload.category = payload.category !== undefined && payload.category !== null ? String(payload.category) : existing.category;
+    if (payload.flavor !== undefined) payload.flavor = ensureArray(payload.flavor);
+    if (payload.type !== undefined) payload.type = ensureArray(payload.type);
+    if (payload.occasion !== undefined) payload.occasion = ensureArray(payload.occasion);
+    if (payload.weight !== undefined) payload.weight = ensureArray(payload.weight);
+    if (payload.delivery !== undefined) payload.delivery = ensureArray(payload.delivery);
+    if (payload.dietary !== undefined) payload.dietary = ensureArray(payload.dietary);
+    if (payload.ingredients !== undefined) payload.ingredients = ensureArray(payload.ingredients);
+
+    let newImgPath = null;
+
+    // Handle primary image update
+    if (payload.img && typeof payload.img === 'string' && payload.img.startsWith('data:')) {
+      try {
+        payload.imgBase64 = payload.img;
+        newImgPath = await saveBase64Image(payload.img);
+        payload.img = newImgPath;
+      } catch (e) { console.warn('Failed to save primary image update', e); }
+    }
+
+    // Handle multiple images array update
+    if (payload.images && Array.isArray(payload.images)) {
+      const processedImages = [];
+      for (const item of payload.images) {
+        if (item && item.base64 && typeof item.base64 === 'string' && item.base64.startsWith('data:')) {
+          try {
+            const url = await saveBase64Image(item.base64);
+            processedImages.push({ url, base64: item.base64 });
+          } catch (e) { console.warn('Failed to save gallery image update', e); }
+        } else if (item && (item.url || item.base64)) {
+          processedImages.push({ url: item.url || null, base64: item.base64 || null });
+        }
+      }
+      payload.images = processedImages;
+    }
+
+    const updated = await Product.findByIdAndUpdate(req.params.id, payload, { new: true });
+
+    // Cleanup old primary image if replaced
+    if (newImgPath && existing.img && existing.img.startsWith('/uploads/')) {
+      try {
+        const oldRel = existing.img.replace(/^\//, '');
+        const oldPath = path.join(__dirname, '..', oldRel);
+        await fs.promises.unlink(oldPath).catch(() => {});
+      } catch (e) { /* ignore */ }
+    }
+
+    res.json({ data: updated });
+  } catch (err) {
+    console.error('productController.updateProduct error:', err);
+    next(err);
+  }
+};
+
+exports.deleteProduct = async (req, res, next) => {
+  try {
+    const removed = await Product.findByIdAndDelete(req.params.id);
+    if (!removed) return res.status(404).json({ error: 'Product not found' });
+    // keep consistent wrapper for delete as well
+    res.json({ data: { success: true } });
+  } catch (err) {
+    console.error('productController.deleteProduct error:', err);
+    next(err);
+  }
+};

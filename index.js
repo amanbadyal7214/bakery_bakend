@@ -1,0 +1,64 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const mongoose = require('mongoose');
+const path = require('path');
+
+const productRoutes = require('./Routes/productRoutes');
+const categoryRoutes = require('./Routes/categoryRoutes');
+const flavorRoutes = require('./Routes/flavorRoutes');
+const typeRoutes = require('./Routes/typeRoutes');
+const occasionRoutes = require('./Routes/occasionRoutes');
+const weightRoutes = require('./Routes/weightRoutes');
+const shapeRoutes = require('./Routes/shapeRoutes');
+const themeRoutes = require('./Routes/themeRoutes');
+const orderRoutes = require('./Routes/orderRoutes');
+
+const app = express();
+const PORT = process.env.PORT || 5000;
+
+app.use(cors());
+// allow larger payloads (base64 images) — increase limit to 50MB
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// Serve uploaded images
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+app.get('/', (req, res) => res.send({ ok: true, message: 'Bakery API is running' }));
+
+app.use('/api/products', productRoutes);
+app.use('/api/categories', categoryRoutes);
+app.use('/api/flavors', flavorRoutes);
+app.use('/api/types', typeRoutes);
+app.use('/api/occasions', occasionRoutes);
+app.use('/api/weights', weightRoutes);
+app.use('/api/shapes', shapeRoutes);
+app.use('/api/themes', themeRoutes);
+app.use('/api/orders', orderRoutes);
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
+});
+
+async function start() {
+  const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/bakery';
+  try {
+    await mongoose.connect(mongoUri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log('Connected to MongoDB');
+
+    app.listen(PORT, () => {
+      console.log(`Server listening on port ${PORT}`);
+    });
+  } catch (err) {
+    console.error('Failed to connect to MongoDB', err);
+    process.exit(1);
+  }
+}
+
+start();
