@@ -13,6 +13,7 @@ const weightRoutes = require('./Routes/weightRoutes');
 const shapeRoutes = require('./Routes/shapeRoutes');
 const themeRoutes = require('./Routes/themeRoutes');
 const orderRoutes = require('./Routes/orderRoutes');
+const galleryRoutes = require('./Routes/galleryRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -36,6 +37,7 @@ app.use('/api/weights', weightRoutes);
 app.use('/api/shapes', shapeRoutes);
 app.use('/api/themes', themeRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/gallery', galleryRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {
