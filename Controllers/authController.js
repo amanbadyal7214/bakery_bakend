@@ -1,0 +1,42 @@
+const jwt = require('jsonwebtoken');
+const User = require('../Models/User');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
+
+exports.login = async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+
+  try {
+    const normalized = email.toLowerCase().trim();
+
+    // First, allow the environment superadmin (fallback)
+    const superEmail = process.env.SUPER_ADMIN_EMAIL || process.env.SUPERADMIN_EMAIL;
+    const superPassword = process.env.SUPER_ADMIN_PASSWORD || process.env.SUPERADMIN_PASSWORD;
+    if (superEmail && superPassword && normalized === superEmail.toLowerCase().trim() && password === superPassword) {
+      const token = jwt.sign({ id: 'superadmin', email: superEmail.toLowerCase().trim(), role: 'superadmin' }, JWT_SECRET, { expiresIn: '8h' });
+      return res.json({ token, role: 'superadmin', expiresIn: 8 * 60 * 60 });
+    }
+
+    // Otherwise check database for user
+    const user = await User.findOne({ email: normalized });
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const ok = await user.comparePassword(password);
+    if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
+    return res.json({ token, role: user.role, expiresIn: 8 * 60 * 60 });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+exports.me = (req, res) => {
+  // authMiddleware attaches req.user
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  res.json({ user: req.user });
+};
