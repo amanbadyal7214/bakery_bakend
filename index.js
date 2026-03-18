@@ -16,6 +16,7 @@ const orderRoutes = require('./Routes/orderRoutes');
 const galleryRoutes = require('./Routes/galleryRoutes');
 const authRoutes = require('./Routes/authRoutes');
 const adminRoutes = require('./Routes/adminRoutes');
+const customerRoutes = require('./Routes/customerRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -32,6 +33,7 @@ app.get('/', (req, res) => res.send({ ok: true, message: 'Bakery API is running'
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admins', adminRoutes);
+app.use('/api/customers', customerRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/flavors', flavorRoutes);
