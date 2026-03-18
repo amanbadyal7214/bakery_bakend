@@ -31,9 +31,12 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.get('/', (req, res) => res.send({ ok: true, message: 'Bakery API is running' }));
 
+const authMiddleware = require('./Middleware/authMiddleware');
+
 app.use('/api/auth', authRoutes);
 app.use('/api/admins', adminRoutes);
 app.use('/api/customers', customerRoutes);
+
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/flavors', flavorRoutes);

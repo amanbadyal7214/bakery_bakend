@@ -15,8 +15,10 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+const authMiddleware = require('../Middleware/authMiddleware');
+
 // POST /api/orders
-router.post('/', upload.single('image'), controller.createOrder);
+router.post('/', authMiddleware(), upload.single('image'), controller.createOrder);
 
 // GET /api/orders
 router.get('/', controller.listOrders);
@@ -25,6 +27,6 @@ router.get('/', controller.listOrders);
 router.get('/:id', controller.getOrder);
 
 // DELETE /api/orders/:id
-router.delete('/:id', controller.deleteOrder);
+router.delete('/:id', authMiddleware(), controller.deleteOrder);
 
 module.exports = router;
