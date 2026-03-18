@@ -5,10 +5,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
 
 exports.register = async (req, res) => {
   try {
-    const { name, email, address, password } = req.body;
+    const { name, email, phone, address, password } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Name, email, and password are required' });
+    if (!name || !email || !phone || !password) {
+      return res.status(400).json({ error: 'Name, email, phone, and password are required' });
     }
 
     const normalizedEmail = email.toLowerCase().trim();
@@ -22,6 +22,7 @@ exports.register = async (req, res) => {
     const customer = new Customer({
       name,
       email: normalizedEmail,
+      phone,
       address,
     });
 
@@ -41,6 +42,7 @@ exports.register = async (req, res) => {
         id: customer._id,
         name: customer.name,
         email: customer.email,
+        phone: customer.phone,
         address: customer.address,
         role: customer.role,
       },
@@ -108,5 +110,20 @@ exports.me = async (req, res) => {
   } catch (error) {
     console.error('Me Error:', error);
     res.status(500).json({ error: 'Failed to get customer profile' });
+  }
+};
+
+exports.getAllCustomers = async (req, res) => {
+  try {
+    // Allow admins/superadmins to fetch all customers
+    if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'superadmin')) {
+      return res.status(403).json({ error: 'Forbidden: insufficient privileges' });
+    }
+
+    const customers = await Customer.find().select('-passwordHash').sort({ createdAt: -1 });
+    res.json(customers);
+  } catch (error) {
+    console.error('Fetch All Customers Error:', error);
+    res.status(500).json({ error: 'Failed to fetch customers' });
   }
 };
