@@ -28,6 +28,27 @@ exports.list = async (req, res, next) => {
   }
 };
 
+// Public: list contact messages that are feedbacks and expose them as testimonials
+exports.listTestimonials = async (req, res, next) => {
+  try {
+    // Only return contacts where subject equals 'feedback' (case-insensitive)
+    const contacts = await Contact.find({ subject: { $regex: /^feedback$/i } })
+      .sort({ createdAt: -1 })
+      .limit(6);
+
+    const testimonials = contacts.map(c => ({
+      name: c.name,
+      text: c.message,
+      stars: 5, // default to 5 stars for testimonial display
+      role: c.phone || '',
+    }));
+
+    res.json({ success: true, testimonials });
+  } catch (err) {
+    next(err);
+  }
+};
+
 exports.markRead = async (req, res, next) => {
   try {
     const { id } = req.params;

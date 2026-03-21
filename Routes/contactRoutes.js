@@ -6,6 +6,9 @@ const authMiddleware = require('../Middleware/authMiddleware');
 // Public: create contact message
 router.post('/', contactController.create);
 
+// Public: testimonials derived from contact messages with subject='feedback'
+router.get('/testimonials', contactController.listTestimonials);
+
 // Admin: list, mark read, delete
 // Require authentication but not a specific role for listing (allow any authenticated admin user)
 router.get('/', authMiddleware(), contactController.list);
