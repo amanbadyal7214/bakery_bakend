@@ -4,13 +4,8 @@ exports.getProfile = async (req, res) => {
   try {
     let profile = await StoreProfile.findOne();
     if (!profile) {
-      profile = new StoreProfile({
-        name: 'Hangary? Sweet.',
-        email: 'admin@hangarysweet.com',
-        phone: '+1 234 567 890',
-        address: '123 Baker Street, London'
-      });
-      await profile.save();
+      // Do not create or return dummy data. Let frontend handle empty/missing profile.
+      return res.json({ ok: true, profile: null });
     }
     res.json({ ok: true, profile });
   } catch (err) {
@@ -36,6 +31,9 @@ exports.updateProfile = async (req, res) => {
       profile.address = data.address ?? profile.address;
       profile.currency = data.currency ?? profile.currency;
       profile.timezone = data.timezone ?? profile.timezone;
+      profile.openingTime = data.openingTime ?? profile.openingTime;
+      profile.closingTime = data.closingTime ?? profile.closingTime;
+      profile.hours = data.hours ?? profile.hours;
       profile.updatedAt = new Date();
     }
     await profile.save();

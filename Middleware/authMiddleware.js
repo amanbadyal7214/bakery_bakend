@@ -10,8 +10,13 @@ module.exports = function (requiredRole) {
     try {
       const payload = jwt.verify(token, JWT_SECRET);
       req.user = payload;
-      if (requiredRole && payload.role !== requiredRole) {
-        return res.status(403).json({ error: 'Forbidden: insufficient role' });
+      if (requiredRole) {
+        // allow superadmin to satisfy admin-required routes
+        const userRole = payload.role;
+        const allowed = userRole === requiredRole || userRole === 'superadmin';
+        if (!allowed) {
+          return res.status(403).json({ error: 'Forbidden: insufficient role' });
+        }
       }
       next();
     } catch (err) {
