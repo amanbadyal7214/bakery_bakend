@@ -19,6 +19,8 @@ const adminRoutes = require('./Routes/adminRoutes');
 const customerRoutes = require('./Routes/customerRoutes');
 const storeRoutes = require('./Routes/storeRoutes');
 const contactRoutes = require('./Routes/contactRoutes');
+const originStoryRoutes = require('./Routes/originStoryRoutes');
+const valuesRoutes = require('./Routes/valuesRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -51,6 +53,8 @@ app.use('/api/orders', orderRoutes);
 app.use('/api/gallery', galleryRoutes);
 app.use('/api/store', storeRoutes);
 app.use('/api/contacts', contactRoutes);
+app.use('/api/origin-story', originStoryRoutes);
+app.use('/api/values', valuesRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {
