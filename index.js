@@ -21,6 +21,7 @@ const storeRoutes = require('./Routes/storeRoutes');
 const contactRoutes = require('./Routes/contactRoutes');
 const originStoryRoutes = require('./Routes/originStoryRoutes');
 const valuesRoutes = require('./Routes/valuesRoutes');
+const teamRoutes = require('./Routes/teamRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -55,6 +56,7 @@ app.use('/api/store', storeRoutes);
 app.use('/api/contacts', contactRoutes);
 app.use('/api/origin-story', originStoryRoutes);
 app.use('/api/values', valuesRoutes);
+app.use('/api/team', teamRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {
