@@ -149,6 +149,18 @@ exports.updateProduct = async (req, res, next) => {
       return [String(val)];
     };
 
+    // Coerce numeric fields if provided and validate
+    if (payload.price !== undefined) {
+      const pnum = Number(payload.price);
+      if (Number.isNaN(pnum)) return res.status(400).json({ error: 'Invalid price' });
+      payload.price = pnum;
+    }
+    if (payload.stock !== undefined) {
+      const snum = Number(payload.stock);
+      if (Number.isNaN(snum)) return res.status(400).json({ error: 'Invalid stock' });
+      payload.stock = snum;
+    }
+
     payload.category = payload.category !== undefined && payload.category !== null ? String(payload.category) : existing.category;
     if (payload.flavor !== undefined) payload.flavor = ensureArray(payload.flavor);
     if (payload.type !== undefined) payload.type = ensureArray(payload.type);
@@ -157,6 +169,29 @@ exports.updateProduct = async (req, res, next) => {
     if (payload.delivery !== undefined) payload.delivery = ensureArray(payload.delivery);
     if (payload.dietary !== undefined) payload.dietary = ensureArray(payload.dietary);
     if (payload.ingredients !== undefined) payload.ingredients = ensureArray(payload.ingredients);
+
+    // Coerce shape/theme to string if arrays or comma-separated values were sent
+    if (payload.shape !== undefined) {
+      if (Array.isArray(payload.shape)) payload.shape = payload.shape.length ? String(payload.shape[0]) : '';
+      else if (typeof payload.shape === 'string') {
+        // if frontend sent comma-separated values, take first as primary
+        payload.shape = payload.shape.includes(',') ? payload.shape.split(',').map(s => s.trim()).filter(Boolean)[0] || '' : payload.shape;
+      } else if (payload.shape === null) payload.shape = '';
+      else payload.shape = String(payload.shape);
+    } else {
+      // preserve existing if not provided
+      payload.shape = existing.shape || '';
+    }
+
+    if (payload.theme !== undefined) {
+      if (Array.isArray(payload.theme)) payload.theme = payload.theme.length ? String(payload.theme[0]) : '';
+      else if (typeof payload.theme === 'string') {
+        payload.theme = payload.theme.includes(',') ? payload.theme.split(',').map(s => s.trim()).filter(Boolean)[0] || '' : payload.theme;
+      } else if (payload.theme === null) payload.theme = '';
+      else payload.theme = String(payload.theme);
+    } else {
+      payload.theme = existing.theme || '';
+    }
 
     let newImgPath = null;
 
@@ -185,10 +220,11 @@ exports.updateProduct = async (req, res, next) => {
       payload.images = processedImages;
     }
 
-    const updated = await Product.findByIdAndUpdate(req.params.id, payload, { new: true });
+    // Run validators on update to catch bad data early
+    const updated = await Product.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true, context: 'query' });
 
     // Cleanup old primary image if replaced
-    if (newImgPath && existing.img && existing.img.startsWith('/uploads/')) {
+    if (newImgPath && existing.img && typeof existing.img === 'string' && existing.img.startsWith('/uploads/')) {
       try {
         const oldRel = existing.img.replace(/^\//, '');
         const oldPath = path.join(__dirname, '..', oldRel);
@@ -199,7 +235,10 @@ exports.updateProduct = async (req, res, next) => {
     res.json({ data: updated });
   } catch (err) {
     console.error('productController.updateProduct error:', err);
-    next(err);
+    if (err && err.name === 'ValidationError') {
+      return res.status(400).json({ error: 'Validation failed', details: err.message });
+    }
+    return res.status(500).json({ error: 'Failed to update product', details: err.message });
   }
 };
 
