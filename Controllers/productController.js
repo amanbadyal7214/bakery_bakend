@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
 const Product = require('../Models/Product');
+const IngredientDetail = require('../Models/IngredientDetail');
 
 // helper: save data URL (base64) image to uploads and return web path
 const saveBase64Image = async (dataUrl) => {
@@ -28,6 +29,77 @@ const saveBase64Image = async (dataUrl) => {
     await fs.promises.writeFile(fallbackPath, buffer);
     return `/uploads/${fallbackName}`;
   }
+};
+
+// helper: calculate total nutrition for a product based on its ingredients
+const calculateProductNutrition = async (ingredients) => {
+  const finalTotals = {}; // key -> { value, unit }
+  const cache = new Map();
+
+  const resolve = async (name, grams) => {
+    const cacheKey = `${name}_${grams}`;
+    if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+    const detail = await IngredientDetail.findOne({ name });
+    if (!detail || !detail.nutritionPer100g) return {};
+
+    const totals = {};
+    const nutrients = detail.nutritionPer100g instanceof Map ? Object.fromEntries(detail.nutritionPer100g) : detail.nutritionPer100g;
+
+    for (const [nutrientName, val] of Object.entries(nutrients || {})) {
+      let num = 0;
+      let unit = '';
+      if (typeof val === 'number') {
+        num = val;
+      } else if (val && typeof val === 'object') {
+        num = typeof val.value === 'number' ? val.value : 0;
+        unit = val.unit || '';
+      }
+
+      const scaled = (num / 100) * grams;
+
+      // Check if this 'nutrientName' is actually another ingredient
+      const subDetail = await IngredientDetail.findOne({ name: nutrientName });
+      if (subDetail) {
+        // Compound: recursively resolve
+        const subResult = await resolve(nutrientName, scaled);
+        for (const [sn, sv] of Object.entries(subResult)) {
+          if (!totals[sn]) totals[sn] = { value: 0, unit: sv.unit };
+          totals[sn].value += sv.value;
+        }
+      } else {
+        // Base nutrient (e.g. calories, protein)
+        if (!totals[nutrientName]) totals[nutrientName] = { value: 0, unit: unit };
+        totals[nutrientName].value += scaled;
+      }
+    }
+    
+    cache.set(cacheKey, totals);
+    return totals;
+  };
+
+  if (!ingredients || !Array.isArray(ingredients)) return finalTotals;
+
+  for (const entry of ingredients) {
+    const match = String(entry).match(/^(.+)\s*\((\d+(?:\.\d+)?)\s*g\)$/i);
+    if (!match) continue;
+
+    const name = match[1].trim();
+    const grams = parseFloat(match[2]);
+    if (isNaN(grams)) continue;
+
+    const res = await resolve(name, grams);
+    for (const [k, v] of Object.entries(res)) {
+      if (!finalTotals[k]) finalTotals[k] = { value: 0, unit: v.unit };
+      finalTotals[k].value += v.value;
+    }
+  }
+
+  // Round results
+  for (const k in finalTotals) {
+    finalTotals[k].value = Math.round(finalTotals[k].value * 100) / 100;
+  }
+  return finalTotals;
 };
 
 exports.listProducts = async (req, res, next) => {
@@ -121,6 +193,9 @@ exports.createProduct = async (req, res, next) => {
       }
       payload.images = processedImages;
     }
+
+    // Calculate total nutrition
+    payload.totalNutrition = await calculateProductNutrition(payload.ingredients);
 
     const p = new Product(payload);
     await p.save();
@@ -218,6 +293,11 @@ exports.updateProduct = async (req, res, next) => {
         }
       }
       payload.images = processedImages;
+    }
+
+    // Recalculate nutrition on update
+    if (payload.ingredients !== undefined) {
+      payload.totalNutrition = await calculateProductNutrition(payload.ingredients);
     }
 
     // Run validators on update to catch bad data early
