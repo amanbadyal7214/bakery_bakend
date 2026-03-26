@@ -23,6 +23,7 @@ const originStoryRoutes = require('./Routes/originStoryRoutes');
 const valuesRoutes = require('./Routes/valuesRoutes');
 const teamRoutes = require('./Routes/teamRoutes');
 const ingredientRoutes = require('./Routes/ingredientRoutes');
+const ingredientDetailRoutes = require('./Routes/ingredientDetailRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -59,6 +60,7 @@ app.use('/api/origin-story', originStoryRoutes);
 app.use('/api/values', valuesRoutes);
 app.use('/api/team', teamRoutes);
 app.use('/api/ingredients', ingredientRoutes);
+app.use('/api/ingredient-details', ingredientDetailRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {
