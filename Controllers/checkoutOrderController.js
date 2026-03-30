@@ -109,3 +109,60 @@ exports.listMyOrders = async (req, res) => {
     return res.status(500).json({ error: 'Failed to fetch checkout orders' });
   }
 };
+
+exports.listAllOrders = async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: 'Only admins can view all checkout orders' });
+    }
+
+    const orders = await CheckoutOrder.find().sort({ createdAt: -1 });
+    return res.json({ orders });
+  } catch (error) {
+    console.error('List All Checkout Orders Error:', error);
+    return res.status(500).json({ error: 'Failed to fetch checkout orders' });
+  }
+};
+
+exports.updateOrderStatus = async (req, res) => {
+  try {
+    if (!req.user || req.user.role !== 'superadmin') {
+      return res.status(403).json({ error: 'Only admins can update order status' });
+    }
+
+    const { orderId } = req.params;
+    const { status } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+
+    const validStatuses = ['placed', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    const order = await CheckoutOrder.findByIdAndUpdate(
+      orderId,
+      { orderStatus: status },
+      { new: true }
+    );
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    return res.json({
+      message: 'Order status updated successfully',
+      order: {
+        id: order._id,
+        orderNumber: order.orderNumber,
+        orderStatus: order.orderStatus,
+        paymentStatus: order.paymentStatus,
+      },
+    });
+  } catch (error) {
+    console.error('Update Order Status Error:', error);
+    return res.status(500).json({ error: 'Failed to update order status' });
+  }
+};
