@@ -17,6 +17,7 @@ const galleryRoutes = require('./Routes/galleryRoutes');
 const authRoutes = require('./Routes/authRoutes');
 const adminRoutes = require('./Routes/adminRoutes');
 const customerRoutes = require('./Routes/customerRoutes');
+const cartRoutes = require('./Routes/cartRoutes');
 const storeRoutes = require('./Routes/storeRoutes');
 const contactRoutes = require('./Routes/contactRoutes');
 const originStoryRoutes = require('./Routes/originStoryRoutes');
@@ -43,6 +44,7 @@ const authMiddleware = require('./Middleware/authMiddleware');
 app.use('/api/auth', authRoutes);
 app.use('/api/admins', adminRoutes);
 app.use('/api/customers', customerRoutes);
+app.use('/api/cart', cartRoutes);
 
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
