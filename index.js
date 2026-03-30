@@ -65,6 +65,9 @@ app.use('/api/ingredient-details', ingredientDetailRoutes);
 // Global error handler
 app.use((err, req, res, next) => {
   console.error(err);
+  if (err && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ error: 'Image size must be 500KB or less' });
+  }
   res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
 });
 

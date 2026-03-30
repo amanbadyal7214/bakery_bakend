@@ -4,6 +4,8 @@ const controller = require('../Controllers/orderController');
 const multer = require('multer');
 const path = require('path');
 
+const MAX_IMAGE_SIZE_BYTES = 500 * 1024; // 500KB
+
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, path.join(__dirname, '..', 'uploads'));
@@ -13,7 +15,7 @@ const storage = multer.diskStorage({
     cb(null, unique + path.extname(file.originalname));
   }
 });
-const upload = multer({ storage });
+const upload = multer({ storage, limits: { fileSize: MAX_IMAGE_SIZE_BYTES } });
 
 const authMiddleware = require('../Middleware/authMiddleware');
 

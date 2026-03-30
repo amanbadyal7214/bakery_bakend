@@ -5,6 +5,8 @@ const multer = require('multer');
 const teamController = require('../Controllers/teamController');
 const authMiddleware = require('../Middleware/authMiddleware');
 
+const MAX_IMAGE_SIZE_BYTES = 500 * 1024; // 500KB
+
 // multer storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -15,7 +17,7 @@ const storage = multer.diskStorage({
     cb(null, safeName);
   }
 });
-const upload = multer({ storage, limits: { fileSize: 5 * 1024 * 1024 } }); // 5 MB limit
+const upload = multer({ storage, limits: { fileSize: MAX_IMAGE_SIZE_BYTES } });
 
 // Public list
 router.get('/', teamController.list);

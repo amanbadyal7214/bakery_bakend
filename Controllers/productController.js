@@ -4,6 +4,16 @@ const sharp = require('sharp');
 const Product = require('../Models/Product');
 const IngredientDetail = require('../Models/IngredientDetail');
 
+const MAX_IMAGE_SIZE_BYTES = 500 * 1024; // 500KB
+
+const assertImageWithinSizeLimit = (buffer) => {
+  if (buffer.length > MAX_IMAGE_SIZE_BYTES) {
+    const err = new Error('Image size must be 500KB or less');
+    err.status = 400;
+    throw err;
+  }
+};
+
 // helper: save data URL (base64) image to uploads and return web path
 const saveBase64Image = async (dataUrl) => {
   if (!dataUrl || typeof dataUrl !== 'string') return dataUrl;
@@ -13,6 +23,7 @@ const saveBase64Image = async (dataUrl) => {
   const b64 = m[2];
   // convert image buffer to webp using sharp for consistent storage
   const buffer = Buffer.from(b64, 'base64');
+  assertImageWithinSizeLimit(buffer);
   const uploadDir = path.join(__dirname, '..', 'uploads');
   await fs.promises.mkdir(uploadDir, { recursive: true });
   const filename = `${Date.now()}-${Math.round(Math.random()*1e9)}.webp`;
@@ -171,10 +182,8 @@ exports.createProduct = async (req, res, next) => {
 
     // Handle primary image
     if (payload.img && typeof payload.img === 'string' && payload.img.startsWith('data:')) {
-      try {
-        payload.imgBase64 = payload.img;
-        payload.img = await saveBase64Image(payload.img);
-      } catch (e) { console.warn('Failed to save primary image', e); }
+      payload.imgBase64 = payload.img;
+      payload.img = await saveBase64Image(payload.img);
     }
 
     // Handle multiple images array
@@ -182,10 +191,8 @@ exports.createProduct = async (req, res, next) => {
       const processedImages = [];
       for (const item of payload.images) {
         if (item && item.base64 && typeof item.base64 === 'string' && item.base64.startsWith('data:')) {
-          try {
-            const url = await saveBase64Image(item.base64);
-            processedImages.push({ url, base64: item.base64 });
-          } catch (e) { console.warn('Failed to save gallery image', e); }
+          const url = await saveBase64Image(item.base64);
+          processedImages.push({ url, base64: item.base64 });
         } else if (item && (item.url || item.base64)) {
           // preserve provided url/base64 fields
           processedImages.push({ url: item.url || null, base64: item.base64 || null });
@@ -272,11 +279,9 @@ exports.updateProduct = async (req, res, next) => {
 
     // Handle primary image update
     if (payload.img && typeof payload.img === 'string' && payload.img.startsWith('data:')) {
-      try {
-        payload.imgBase64 = payload.img;
-        newImgPath = await saveBase64Image(payload.img);
-        payload.img = newImgPath;
-      } catch (e) { console.warn('Failed to save primary image update', e); }
+      payload.imgBase64 = payload.img;
+      newImgPath = await saveBase64Image(payload.img);
+      payload.img = newImgPath;
     }
 
     // Handle multiple images array update
@@ -284,10 +289,8 @@ exports.updateProduct = async (req, res, next) => {
       const processedImages = [];
       for (const item of payload.images) {
         if (item && item.base64 && typeof item.base64 === 'string' && item.base64.startsWith('data:')) {
-          try {
-            const url = await saveBase64Image(item.base64);
-            processedImages.push({ url, base64: item.base64 });
-          } catch (e) { console.warn('Failed to save gallery image update', e); }
+          const url = await saveBase64Image(item.base64);
+          processedImages.push({ url, base64: item.base64 });
         } else if (item && (item.url || item.base64)) {
           processedImages.push({ url: item.url || null, base64: item.base64 || null });
         }
