@@ -27,8 +27,20 @@ exports.login = async (req, res) => {
     const ok = await user.comparePassword(password);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
-    return res.json({ token, role: user.role, expiresIn: 8 * 60 * 60 });
+    const token = jwt.sign({ id: user._id, email: user.email, role: user.role, permissions: user.permissions }, JWT_SECRET, { expiresIn: '8h' });
+    return res.json({ 
+      token, 
+      role: user.role,
+      permissions: user.permissions || [],
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        permissions: user.permissions || []
+      },
+      expiresIn: 8 * 60 * 60 
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: 'Internal server error' });

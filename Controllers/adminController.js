@@ -34,3 +34,25 @@ exports.delete = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+exports.updatePermissions = async (req, res) => {
+  const { id } = req.params;
+  const { permissions } = req.body || {};
+  
+  if (!id) return res.status(400).json({ error: 'Missing id' });
+  if (!Array.isArray(permissions)) return res.status(400).json({ error: 'Permissions must be an array' });
+  
+  try {
+    const user = await User.findByIdAndUpdate(
+      id,
+      { permissions },
+      { new: true }
+    ).select('-passwordHash');
+    
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json(user);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

@@ -7,5 +7,6 @@ const authMiddleware = require('../Middleware/authMiddleware');
 router.get('/', authMiddleware('superadmin'), adminController.list);
 router.post('/', authMiddleware('superadmin'), adminController.create);
 router.delete('/:id', authMiddleware('superadmin'), adminController.delete);
+router.patch('/:id/permissions', authMiddleware('superadmin'), adminController.updatePermissions);
 
 module.exports = router;
