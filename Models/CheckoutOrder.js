@@ -28,6 +28,9 @@ const CheckoutOrderSchema = new mongoose.Schema(
     totalAmount: { type: Number, required: true, min: 0 },
     paymentStatus: { type: String, enum: ['pending', 'paid', 'failed'], default: 'pending' },
     orderStatus: { type: String, enum: ['placed', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'], default: 'placed' },
+    deliveryPartner: { type: String, trim: true, default: '' },
+    deliveryPartnerPhone: { type: String, trim: true, default: '' },
+    deliveryEstimatedTime: { type: String, trim: true, default: '' },
   },
   { timestamps: true }
 );

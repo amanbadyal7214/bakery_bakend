@@ -73,3 +73,50 @@ exports.deleteOrder = async (req, res, next) => {
     next(err);
   }
 };
+
+// UPDATE ORDER STATUS
+exports.updateOrderStatus = async (req, res, next) => {
+  try {
+    if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'superadmin')) {
+      return res.status(403).json({ success: false, error: 'Only admins can update order status' });
+    }
+
+    const { id } = req.params;
+    const { status, deliveryPartner, deliveryPartnerPhone, deliveryEstimatedTime } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ success: false, error: 'Status is required' });
+    }
+
+    const validStatuses = ['placed', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, error: 'Invalid status' });
+    }
+
+    // Validate delivery partner info for out_for_delivery status
+    if (status === 'out_for_delivery' && (!deliveryPartner || !deliveryPartnerPhone)) {
+      return res.status(400).json({ success: false, error: 'Delivery partner name and phone are required for out_for_delivery status' });
+    }
+
+    const updateData = { orderStatus: status };
+    if (status === 'out_for_delivery') {
+      updateData.deliveryPartner = String(deliveryPartner).trim();
+      updateData.deliveryPartnerPhone = String(deliveryPartnerPhone).trim();
+      updateData.deliveryEstimatedTime = String(deliveryEstimatedTime || '').trim();
+    }
+
+    const updatedOrder = await Order.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true }
+    );
+
+    if (!updatedOrder) {
+      return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+
+    res.json({ success: true, message: 'Order status updated successfully', order: updatedOrder });
+  } catch (err) {
+    next(err);
+  }
+};

@@ -8,5 +8,6 @@ router.get('/', authMiddleware('superadmin'), adminController.list);
 router.post('/', authMiddleware('superadmin'), adminController.create);
 router.delete('/:id', authMiddleware('superadmin'), adminController.delete);
 router.patch('/:id/permissions', authMiddleware('superadmin'), adminController.updatePermissions);
+router.patch('/:id/role', authMiddleware('superadmin'), adminController.updateRole);
 
 module.exports = router;

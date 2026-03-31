@@ -131,7 +131,7 @@ exports.updateOrderStatus = async (req, res) => {
     }
 
     const { orderId } = req.params;
-    const { status } = req.body;
+    const { status, deliveryPartner, deliveryPartnerPhone, deliveryEstimatedTime } = req.body;
 
     if (!status) {
       return res.status(400).json({ error: 'Status is required' });
@@ -142,9 +142,21 @@ exports.updateOrderStatus = async (req, res) => {
       return res.status(400).json({ error: 'Invalid status' });
     }
 
+    // Validate delivery partner info for out_for_delivery status
+    if (status === 'out_for_delivery' && (!deliveryPartner || !deliveryPartnerPhone)) {
+      return res.status(400).json({ error: 'Delivery partner name and phone are required for out_for_delivery status' });
+    }
+
+    const updateData = { orderStatus: status };
+    if (status === 'out_for_delivery') {
+      updateData.deliveryPartner = String(deliveryPartner).trim();
+      updateData.deliveryPartnerPhone = String(deliveryPartnerPhone).trim();
+      updateData.deliveryEstimatedTime = String(deliveryEstimatedTime || '').trim();
+    }
+
     const order = await CheckoutOrder.findByIdAndUpdate(
       orderId,
-      { orderStatus: status },
+      updateData,
       { new: true }
     );
 
@@ -159,6 +171,9 @@ exports.updateOrderStatus = async (req, res) => {
         orderNumber: order.orderNumber,
         orderStatus: order.orderStatus,
         paymentStatus: order.paymentStatus,
+        deliveryPartner: order.deliveryPartner,
+        deliveryPartnerPhone: order.deliveryPartnerPhone,
+        deliveryEstimatedTime: order.deliveryEstimatedTime,
       },
     });
   } catch (error) {

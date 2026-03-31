@@ -31,4 +31,7 @@ router.get('/:id', controller.getOrder);
 // DELETE /api/orders/:id
 router.delete('/:id', authMiddleware(), controller.deleteOrder);
 
+// PATCH /api/orders/:id/status
+router.patch('/:id/status', authMiddleware(), controller.updateOrderStatus);
+
 module.exports = router;
