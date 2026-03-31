@@ -3,6 +3,7 @@ const router = express.Router();
 const customerController = require('../Controllers/customerController');
 const authMiddleware = require('../Middleware/authMiddleware');
 
+router.post('/send-otp', customerController.sendOtp);
 router.post('/register', customerController.register);
 router.post('/login', customerController.login);
 router.get('/me', authMiddleware(), customerController.me);
