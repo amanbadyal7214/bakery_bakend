@@ -1,10 +1,36 @@
 const jwt = require('jsonwebtoken');
+const axios = require('axios');
 const Customer = require('../Models/Customer');
 const { sendEmail } = require('../config/emailService');
 
 const otpStore = new Map(); // Simple in-memory cache for OTPs
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
+const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY;
+
+// Helper function to verify reCAPTCHA token
+const verifyRecaptcha = async (token) => {
+  try {
+    const response = await axios.post(
+      'https://www.google.com/recaptcha/api/siteverify',
+      null,
+      {
+        params: {
+          secret: RECAPTCHA_SECRET_KEY,
+          response: token,
+        },
+      }
+    );
+
+    const { success, score } = response.data;
+    // score ranges from 0.0 to 1.0, where 1.0 is very likely a legitimate interaction
+    // We'll accept if success is true and score is above 0.5
+    return success && score > 0.5;
+  } catch (error) {
+    console.error('reCAPTCHA Verification Error:', error);
+    return false;
+  }
+};
 
 exports.sendOtp = async (req, res) => {
   try {
@@ -38,10 +64,16 @@ exports.sendOtp = async (req, res) => {
 
 exports.register = async (req, res) => {
   try {
-    const { name, email, phone, address, password, otp } = req.body;
+    const { name, email, phone, address, password, otp, recaptchaToken } = req.body;
 
-    if (!name || !email || !phone || !password || !otp) {
-      return res.status(400).json({ error: 'Name, email, phone, password, and OTP are required' });
+    if (!name || !email || !phone || !password || !otp || !recaptchaToken) {
+      return res.status(400).json({ error: 'Name, email, phone, password, OTP, and reCAPTCHA verification are required' });
+    }
+
+    // Verify reCAPTCHA token
+    const isValidRecaptcha = await verifyRecaptcha(recaptchaToken);
+    if (!isValidRecaptcha) {
+      return res.status(400).json({ error: 'reCAPTCHA verification failed. Please try again.' });
     }
 
     const normalizedEmail = email.toLowerCase().trim();
