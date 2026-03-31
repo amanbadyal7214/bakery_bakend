@@ -112,7 +112,7 @@ exports.listMyOrders = async (req, res) => {
 
 exports.listAllOrders = async (req, res) => {
   try {
-    if (!req.user || req.user.role !== 'superadmin') {
+    if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'superadmin')) {
       return res.status(403).json({ error: 'Only admins can view all checkout orders' });
     }
 
@@ -126,7 +126,7 @@ exports.listAllOrders = async (req, res) => {
 
 exports.updateOrderStatus = async (req, res) => {
   try {
-    if (!req.user || req.user.role !== 'superadmin') {
+    if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'superadmin')) {
       return res.status(403).json({ error: 'Only admins can update order status' });
     }
 
