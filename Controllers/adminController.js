@@ -1,4 +1,5 @@
 const User = require('../Models/User');
+const { sanitizePermissions } = require('../config/permissions');
 
 exports.list = async (req, res) => {
   const users = await User.find({ role: 'admin' }).select('-passwordHash');
@@ -41,11 +42,12 @@ exports.updatePermissions = async (req, res) => {
   
   if (!id) return res.status(400).json({ error: 'Missing id' });
   if (!Array.isArray(permissions)) return res.status(400).json({ error: 'Permissions must be an array' });
+  const sanitizedPermissions = sanitizePermissions(permissions);
   
   try {
     const user = await User.findByIdAndUpdate(
       id,
-      { permissions },
+      { permissions: sanitizedPermissions },
       { new: true }
     ).select('-passwordHash');
     
