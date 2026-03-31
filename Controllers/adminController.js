@@ -42,7 +42,7 @@ exports.updatePermissions = async (req, res) => {
   
   if (!id) return res.status(400).json({ error: 'Missing id' });
   if (!Array.isArray(permissions)) return res.status(400).json({ error: 'Permissions must be an array' });
-  const sanitizedPermissions = sanitizePermissions(permissions);
+  const sanitizedPermissions = await sanitizePermissions(permissions);
   
   try {
     const user = await User.findByIdAndUpdate(
