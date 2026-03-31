@@ -8,7 +8,7 @@ exports.list = async (req, res) => {
 };
 
 exports.create = async (req, res) => {
-  const { email, password, name, role } = req.body || {};
+  const { email, password, name, phone, role } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
   try {
@@ -33,12 +33,13 @@ exports.create = async (req, res) => {
     const user = new User({ 
       email: email.toLowerCase().trim(), 
       name, 
+      phone: phone?.trim() || undefined,
       role: finalRole,
       permissions: finalPermissions
     });
     await user.setPassword(password);
     await user.save();
-    res.status(201).json({ ok: true, user: { id: user._id, email: user.email, name: user.name, role: user.role, permissions: user.permissions } });
+    res.status(201).json({ ok: true, user: { id: user._id, email: user.email, name: user.name, phone: user.phone, role: user.role, permissions: user.permissions } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Internal server error' });
