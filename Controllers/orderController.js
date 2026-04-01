@@ -117,9 +117,9 @@ exports.updateOrderStatus = async (req, res, next) => {
       return res.status(404).json({ success: false, error: 'Order not found' });
     }
 
-    // Send email notification to customer when out_for_delivery
+    // Send email notification to customer when out_for_delivery or delivered
     try {
-      if (status === 'out_for_delivery') {
+      if (status === 'out_for_delivery' || status === 'delivered') {
         // Try order-level email first
         let recipientEmail = updatedOrder.email || updatedOrder.customerEmail || '';
 
@@ -135,9 +135,16 @@ exports.updateOrderStatus = async (req, res, next) => {
           const eta = updatedOrder.deliveryEstimatedTime || 'Pending';
           const orderIdShort = String(updatedOrder._id || updatedOrder.id).slice(-6);
 
-          const subject = `Aapka order #ORD-${orderIdShort} ab delivery par hai`;
-          const message = `Namaste ${updatedOrder.name || ''},\n\nAapke order #ORD-${orderIdShort} ke liye delivery partner assign ho gaya hai.\n\nDriver: ${driverName}\nPhone: ${driverPhone}\nETA: ${eta}\n\nDhanyavaad — Bakery Team`;
-          const html = `<p>Namaste ${updatedOrder.name || ''},</p><p>Aapke order <strong>#ORD-${orderIdShort}</strong> ke liye delivery partner assign ho gaya hai.</p><ul><li><strong>Driver:</strong> ${driverName}</li><li><strong>Phone:</strong> ${driverPhone}</li><li><strong>ETA:</strong> ${eta}</li></ul><p>Dhanyavaad — <em>Bakery Team</em></p>`;
+          let subject, message, html;
+          if (status === 'out_for_delivery') {
+            subject = `Aapka order #ORD-${orderIdShort} ab delivery par hai`;
+            message = `Namaste ${updatedOrder.name || ''},\n\nAapke order #ORD-${orderIdShort} ke liye delivery partner assign ho gaya hai.\n\nDriver: ${driverName}\nPhone: ${driverPhone}\nETA: ${eta}\n\nDhanyavaad — Bakery Team`;
+            html = `<p>Namaste ${updatedOrder.name || ''},</p><p>Aapke order <strong>#ORD-${orderIdShort}</strong> ke liye delivery partner assign ho gaya hai.</p><ul><li><strong>Driver:</strong> ${driverName}</li><li><strong>Phone:</strong> ${driverPhone}</li><li><strong>ETA:</strong> ${eta}</li></ul><p>Dhanyavaad — <em>Bakery Team</em></p>`;
+          } else {
+            subject = `Aapka order #ORD-${orderIdShort} deliver ho chuka hai`;
+            message = `Namaste ${updatedOrder.name || ''},\n\nAapka order #ORD-${orderIdShort} ab successfully deliver kar diya gaya hai.\n\nDriver: ${driverName}\nPhone: ${driverPhone}\n\nDhanyavaad — Bakery Team`;
+            html = `<p>Namaste ${updatedOrder.name || ''},</p><p>Aapka order <strong>#ORD-${orderIdShort}</strong> ab successfully deliver kar diya gaya hai.</p><ul><li><strong>Driver:</strong> ${driverName}</li><li><strong>Phone:</strong> ${driverPhone}</li></ul><p>Dhanyavaad — <em>Bakery Team</em></p>`;
+          }
 
           const info = await sendEmail({ email: recipientEmail, subject, message, html });
           console.log('Delivery email send result:', info && (info.messageId || info.response || info));

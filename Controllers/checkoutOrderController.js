@@ -2,6 +2,7 @@ const Cart = require('../Models/Cart');
 const CheckoutOrder = require('../Models/CheckoutOrder');
 const { sendEmail } = require('../config/emailService');
 const Customer = require('../Models/Customer');
+const mongoose = require('mongoose');
 
 const HOME_DELIVERY_FEE = 49;
 
@@ -139,6 +140,25 @@ exports.updateOrderStatus = async (req, res) => {
       return res.status(400).json({ error: 'Status is required' });
     }
 
+    // Resolve orderId: accept either ObjectId or orderNumber
+    let resolvedOrderId = orderId;
+    if (!mongoose.Types.ObjectId.isValid(String(orderId))) {
+      // try find by orderNumber
+      const byNumber = await CheckoutOrder.findOne({ orderNumber: String(orderId) });
+      if (byNumber && byNumber._id) {
+        resolvedOrderId = String(byNumber._id);
+      } else {
+        // try to strip common prefixes like '#ORD-'
+        const stripped = String(orderId).replace(/^#?ORD-/i, '').trim();
+        const byNumber2 = await CheckoutOrder.findOne({ orderNumber: new RegExp(stripped, 'i') });
+        if (byNumber2 && byNumber2._id) {
+          resolvedOrderId = String(byNumber2._id);
+        } else {
+          return res.status(400).json({ error: 'Invalid orderId' });
+        }
+      }
+    }
+
     const validStatuses = ['placed', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
@@ -157,7 +177,7 @@ exports.updateOrderStatus = async (req, res) => {
     }
 
     const order = await CheckoutOrder.findByIdAndUpdate(
-      orderId,
+      resolvedOrderId,
       updateData,
       { new: true }
     );
@@ -166,9 +186,9 @@ exports.updateOrderStatus = async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Send email notification to customer when out_for_delivery
+    // Send email notification to customer when out_for_delivery or delivered
     try {
-      if (status === 'out_for_delivery') {
+      if (status === 'out_for_delivery' || status === 'delivered') {
         // Try to find customer email from CheckoutOrder -> customerId -> Customer
         let recipientEmail = '';
         if (order.customerId) {
@@ -192,9 +212,16 @@ exports.updateOrderStatus = async (req, res) => {
           const eta = order.deliveryEstimatedTime || 'Pending';
           const orderRef = order.orderNumber || String(order._id).slice(-6);
 
-          const subject = `Aapka order ${orderRef} ab delivery par hai`;
-          const message = `Namaste ${order.customerName || ''},\n\nAapke order ${orderRef} ke liye delivery partner assign ho gaya hai.\n\nDriver: ${driverName}\nPhone: ${driverPhone}\nETA: ${eta}\n\nDhanyavaad — Bakery Team`;
-          const html = `<p>Namaste ${order.customerName || ''},</p><p>Aapke order <strong>${orderRef}</strong> ke liye delivery partner assign ho gaya hai.</p><ul><li><strong>Driver:</strong> ${driverName}</li><li><strong>Phone:</strong> ${driverPhone}</li><li><strong>ETA:</strong> ${eta}</li></ul><p>Dhanyavaad — <em>Bakery Team</em></p>`;
+          let subject, message, html;
+          if (status === 'out_for_delivery') {
+            subject = `Aapka order ${orderRef} ab delivery par hai`;
+            message = `Namaste ${order.customerName || ''},\n\nAapke order ${orderRef} ke liye delivery partner assign ho gaya hai.\n\nDriver: ${driverName}\nPhone: ${driverPhone}\nETA: ${eta}\n\nDhanyavaad — Bakery Team`;
+            html = `<p>Namaste ${order.customerName || ''},</p><p>Aapke order <strong>${orderRef}</strong> ke liye delivery partner assign ho gaya hai.</p><ul><li><strong>Driver:</strong> ${driverName}</li><li><strong>Phone:</strong> ${driverPhone}</li><li><strong>ETA:</strong> ${eta}</li></ul><p>Dhanyavaad — <em>Bakery Team</em></p>`;
+          } else {
+            subject = `Aapka order ${orderRef} deliver ho chuka hai`;
+            message = `Namaste ${order.customerName || ''},\n\nAapka order ${orderRef} ab successfully deliver kar diya gaya hai.\n\nDriver: ${driverName}\nPhone: ${driverPhone}\n\nDhanyavaad — Bakery Team`;
+            html = `<p>Namaste ${order.customerName || ''},</p><p>Aapka order <strong>${orderRef}</strong> ab successfully deliver kar diya gaya hai.</p><ul><li><strong>Driver:</strong> ${driverName}</li><li><strong>Phone:</strong> ${driverPhone}</li></ul><p>Dhanyavaad — <em>Bakery Team</em></p>`;
+          }
 
           const info = await sendEmail({ email: recipientEmail, subject, message, html });
           console.log('Checkout delivery email send result:', info && (info.messageId || info.response || info));
