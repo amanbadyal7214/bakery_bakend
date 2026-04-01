@@ -1,5 +1,7 @@
 const Cart = require('../Models/Cart');
 const CheckoutOrder = require('../Models/CheckoutOrder');
+const { sendEmail } = require('../config/emailService');
+const Customer = require('../Models/Customer');
 
 const HOME_DELIVERY_FEE = 49;
 
@@ -162,6 +164,46 @@ exports.updateOrderStatus = async (req, res) => {
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Send email notification to customer when out_for_delivery
+    try {
+      if (status === 'out_for_delivery') {
+        // Try to find customer email from CheckoutOrder -> customerId -> Customer
+        let recipientEmail = '';
+        if (order.customerId) {
+          try {
+            const custById = await Customer.findById(order.customerId);
+            if (custById && custById.email) recipientEmail = custById.email;
+          } catch (e) {
+            // ignore lookup errors
+          }
+        }
+
+        // Fallback: find by phone
+        if (!recipientEmail && order.customerPhone) {
+          const custByPhone = await Customer.findOne({ phone: String(order.customerPhone).trim() });
+          if (custByPhone && custByPhone.email) recipientEmail = custByPhone.email;
+        }
+
+        if (recipientEmail) {
+          const driverName = order.deliveryPartner || 'Courier';
+          const driverPhone = order.deliveryPartnerPhone || 'N/A';
+          const eta = order.deliveryEstimatedTime || 'Pending';
+          const orderRef = order.orderNumber || String(order._id).slice(-6);
+
+          const subject = `Aapka order ${orderRef} ab delivery par hai`;
+          const message = `Namaste ${order.customerName || ''},\n\nAapke order ${orderRef} ke liye delivery partner assign ho gaya hai.\n\nDriver: ${driverName}\nPhone: ${driverPhone}\nETA: ${eta}\n\nDhanyavaad — Bakery Team`;
+          const html = `<p>Namaste ${order.customerName || ''},</p><p>Aapke order <strong>${orderRef}</strong> ke liye delivery partner assign ho gaya hai.</p><ul><li><strong>Driver:</strong> ${driverName}</li><li><strong>Phone:</strong> ${driverPhone}</li><li><strong>ETA:</strong> ${eta}</li></ul><p>Dhanyavaad — <em>Bakery Team</em></p>`;
+
+          const info = await sendEmail({ email: recipientEmail, subject, message, html });
+          console.log('Checkout delivery email send result:', info && (info.messageId || info.response || info));
+        } else {
+          console.warn('No customer email found for checkout order; skipping email notification for order', order._id || orderId);
+        }
+      }
+    } catch (emailErr) {
+      console.error('Failed to send delivery email for checkout order:', emailErr.message || emailErr);
     }
 
     return res.json({

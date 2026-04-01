@@ -139,7 +139,8 @@ exports.updateOrderStatus = async (req, res, next) => {
           const message = `Namaste ${updatedOrder.name || ''},\n\nAapke order #ORD-${orderIdShort} ke liye delivery partner assign ho gaya hai.\n\nDriver: ${driverName}\nPhone: ${driverPhone}\nETA: ${eta}\n\nDhanyavaad — Bakery Team`;
           const html = `<p>Namaste ${updatedOrder.name || ''},</p><p>Aapke order <strong>#ORD-${orderIdShort}</strong> ke liye delivery partner assign ho gaya hai.</p><ul><li><strong>Driver:</strong> ${driverName}</li><li><strong>Phone:</strong> ${driverPhone}</li><li><strong>ETA:</strong> ${eta}</li></ul><p>Dhanyavaad — <em>Bakery Team</em></p>`;
 
-          await sendEmail({ email: recipientEmail, subject, message, html });
+          const info = await sendEmail({ email: recipientEmail, subject, message, html });
+          console.log('Delivery email send result:', info && (info.messageId || info.response || info));
         } else {
           console.warn('No customer email found; skipping email notification for order', updatedOrder._id || id);
         }
