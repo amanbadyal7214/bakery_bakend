@@ -6,6 +6,7 @@ const GallerySchema = new mongoose.Schema({
   category: { type: String, default: 'Misc' },
   src: { type: String }, // Primary image web path
   imgBase64: { type: String }, // original base64 if provided
+  cloudinaryPublicId: { type: String }, // if uploaded to Cloudinary
   badge: { type: String },
   price: { type: String },
   desc: { type: String },
