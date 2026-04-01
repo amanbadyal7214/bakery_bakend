@@ -2,8 +2,12 @@ const Theme = require('../Models/Theme');
 
 exports.createTheme = async (req, res, next) => {
   try {
-    const { name, description } = req.body;
-    const theme = new Theme({ name, description });
+    const { name, description, subthemes } = req.body;
+    const subs = Array.isArray(subthemes)
+      ? subthemes.map(s => String(s || '').trim()).filter(Boolean)
+      : [];
+
+    const theme = new Theme({ name, description, ...(subs.length ? { subthemes: subs } : {}) });
     await theme.save();
     res.status(201).json(theme);
   } catch (err) {
@@ -40,10 +44,15 @@ exports.getTheme = async (req, res, next) => {
 
 exports.updateTheme = async (req, res, next) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, subthemes } = req.body;
+    const update = { name, description };
+    if (Array.isArray(subthemes)) {
+      update.subthemes = subthemes.map(s => String(s || '').trim()).filter(Boolean);
+    }
+
     const theme = await Theme.findByIdAndUpdate(
       req.params.id,
-      { name, description },
+      update,
       { new: true, runValidators: true }
     );
     if (!theme) {

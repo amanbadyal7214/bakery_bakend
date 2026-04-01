@@ -2,8 +2,12 @@ const Occasion = require('../Models/Occasion');
 
 exports.createOccasion = async (req, res, next) => {
   try {
-    const { name, description } = req.body;
-    const occasion = new Occasion({ name, description });
+    const { name, description, suboccasions } = req.body;
+    const subs = Array.isArray(suboccasions)
+      ? suboccasions.map(s => String(s || '').trim()).filter(Boolean)
+      : [];
+
+    const occasion = new Occasion({ name, description, ...(subs.length ? { suboccasions: subs } : {}) });
     await occasion.save();
     res.status(201).json(occasion);
   } catch (err) {
@@ -40,10 +44,15 @@ exports.getOccasion = async (req, res, next) => {
 
 exports.updateOccasion = async (req, res, next) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, suboccasions } = req.body;
+    const update = { name, description };
+    if (Array.isArray(suboccasions)) {
+      update.suboccasions = suboccasions.map(s => String(s || '').trim()).filter(Boolean);
+    }
+
     const occasion = await Occasion.findByIdAndUpdate(
       req.params.id,
-      { name, description },
+      update,
       { new: true, runValidators: true }
     );
     if (!occasion) {
