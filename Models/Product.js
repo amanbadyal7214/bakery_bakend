@@ -5,12 +5,12 @@ const ProductSchema = new mongoose.Schema({
   price: { type: Number, required: true },
   category: { type: String, required: true },
   stock: { type: Number, default: 0 },
-  img: { type: String }, // Primary image web path
-  imgBase64: { type: String }, // Primary image base64
+  img: { type: String }, // Primary image URL (Cloudinary or remote)
+  imgPublicId: { type: String }, // Cloudinary public_id for primary image
   images: [{
     url: String,
-    base64: String
-  }], // Array for multiple images
+    public_id: String
+  }], // Array for multiple images (no base64 stored)
   rating: { type: Number, default: 4.8 },
   badge: { type: String },
   flavor: { type: [String], default: [] },

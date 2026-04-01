@@ -1,8 +1,68 @@
 const fs = require('fs');
 const path = require('path');
 const sharp = require('sharp');
+const cloudinary = require('cloudinary').v2;
+const cloudinaryConfigured = !!(
+  process.env.CLOUDINARY_URL ||
+  (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)
+);
+if (cloudinaryConfigured) {
+  if (process.env.CLOUDINARY_URL) {
+    // CLOUDINARY_URL covers all config
+    cloudinary.config({ url: process.env.CLOUDINARY_URL });
+  } else {
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
+  }
+}
+// Helper: upload a local file (e.g., saved by multer under /uploads) to Cloudinary and remove the local file.
+const uploadLocalFileToCloudinary = async (localPath) => {
+  if (!cloudinaryConfigured) throw new Error('Cloudinary is not configured');
+  if (!localPath) throw new Error('No local path provided');
+  // Accept either absolute path or application-relative '/uploads/...' path
+  const rel = localPath.startsWith('/') ? localPath.replace(/^\//, '') : localPath;
+  const abs = path.isAbsolute(rel) ? rel : path.join(__dirname, '..', rel);
+  try {
+    const res = await cloudinary.uploader.upload(abs, {
+      folder: 'products',
+      resource_type: 'image',
+      use_filename: true,
+      unique_filename: true,
+      overwrite: false,
+    });
+    // remove the local file if upload succeeded
+    try { await fs.promises.unlink(abs).catch(() => {}); } catch (e) {}
+    return { url: res.secure_url || res.url, public_id: res.public_id };
+  } catch (err) {
+    // do not leave local file removed if upload failed; rethrow
+    throw err;
+  }
+};
+
 const Product = require('../Models/Product');
 const IngredientDetail = require('../Models/IngredientDetail');
+
+// Best-effort: extract Cloudinary public_id from a Cloudinary URL
+const extractCloudinaryPublicIdFromUrl = (url) => {
+  try {
+    if (!url || typeof url !== 'string') return null;
+    const marker = '/upload/';
+    const idx = url.indexOf(marker);
+    if (idx === -1) return null;
+    let path = url.slice(idx + marker.length);
+    // remove version prefix like v123456/
+    path = path.replace(/^v\d+\//, '');
+    // remove file extension if present
+    path = path.replace(/\.[a-zA-Z0-9]+(\?.*)?$/, '');
+    // decode and return
+    return decodeURIComponent(path);
+  } catch (e) {
+    return null;
+  }
+};
 
 const MAX_IMAGE_SIZE_BYTES = 500 * 1024; // 500KB
 
@@ -17,28 +77,36 @@ const assertImageWithinSizeLimit = (buffer) => {
 // helper: save data URL (base64) image to uploads and return web path
 const saveBase64Image = async (dataUrl) => {
   if (!dataUrl || typeof dataUrl !== 'string') return dataUrl;
-  const m = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  const m = dataUrl.match(/^data:(image\/[^;]+);base64,(.+)$/);
   if (!m) return dataUrl;
   const mime = m[1];
   const b64 = m[2];
-  // convert image buffer to webp using sharp for consistent storage
   const buffer = Buffer.from(b64, 'base64');
+  // validate original size (before conversion)
   assertImageWithinSizeLimit(buffer);
-  const uploadDir = path.join(__dirname, '..', 'uploads');
-  await fs.promises.mkdir(uploadDir, { recursive: true });
-  const filename = `${Date.now()}-${Math.round(Math.random()*1e9)}.webp`;
-  const filePath = path.join(uploadDir, filename);
+
+  // We only support Cloudinary storage now. Throw if not configured.
+  if (!cloudinaryConfigured) throw new Error('Cloudinary is not configured; images must be uploaded to Cloudinary');
   try {
+    // convert to webp for consistent storage and possibly smaller size
     const webpBuffer = await sharp(buffer).webp({ quality: 80 }).toBuffer();
-    await fs.promises.writeFile(filePath, webpBuffer);
-    return `/uploads/${filename}`;
-  } catch (e) {
-    // fallback: write original buffer with detected extension if sharp fails
-    const ext = (mime.split('/')[1] || 'png').split('+')[0];
-    const fallbackName = `${Date.now()}-${Math.round(Math.random()*1e9)}.${ext}`;
-    const fallbackPath = path.join(uploadDir, fallbackName);
-    await fs.promises.writeFile(fallbackPath, buffer);
-    return `/uploads/${fallbackName}`;
+    // re-check size after conversion (we allow slightly larger but still check)
+    try { assertImageWithinSizeLimit(webpBuffer); } catch (e) { /* ignore size delta */ }
+
+    const webpDataUrl = `data:image/webp;base64,${webpBuffer.toString('base64')}`;
+    const res = await cloudinary.uploader.upload(webpDataUrl, {
+      folder: 'products',
+      resource_type: 'image',
+      format: 'webp',
+      use_filename: true,
+      unique_filename: true,
+      overwrite: false,
+    });
+    if (res) return { url: (res.secure_url || res.url), public_id: res.public_id };
+    throw new Error('Cloudinary upload did not return result');
+  } catch (err) {
+    // Propagate error so caller can handle; do not persist locally
+    throw err;
   }
 };
 
@@ -181,9 +249,46 @@ exports.createProduct = async (req, res, next) => {
     else if (payload.theme === undefined || payload.theme === null) payload.theme = '';
 
     // Handle primary image
-    if (payload.img && typeof payload.img === 'string' && payload.img.startsWith('data:')) {
-      payload.imgBase64 = payload.img;
-      payload.img = await saveBase64Image(payload.img);
+    if (payload.img && typeof payload.img === 'string') {
+      if (payload.img.startsWith('data:')) {
+        payload.imgBase64 = payload.img;
+        const imgResult = await saveBase64Image(payload.img);
+        payload.img = imgResult.url;
+        payload.imgPublicId = imgResult.public_id || imgResult.publicId || null;
+      } else if (payload.img.startsWith('/uploads/') || payload.img.includes('uploads')) {
+        // File saved by multer locally - upload to Cloudinary and remove local copy
+        const uploadRes = await uploadLocalFileToCloudinary(payload.img);
+        payload.img = uploadRes.url;
+        payload.imgPublicId = uploadRes.public_id || null;
+      } else if (cloudinaryConfigured) {
+        // Remote URL: ensure it's stored on Cloudinary. If already a Cloudinary URL, try extract public id.
+        if (payload.img.includes('res.cloudinary.com')) {
+          if (!payload.imgPublicId) {
+            const extracted = extractCloudinaryPublicIdFromUrl(payload.img);
+            if (extracted) payload.imgPublicId = extracted;
+          }
+          // leave payload.img as-is (already on Cloudinary)
+        } else {
+          // Not a Cloudinary URL; upload remote URL to Cloudinary so we store a Cloudinary-hosted image
+          try {
+            const res = await cloudinary.uploader.upload(payload.img, {
+              folder: 'products',
+              resource_type: 'image',
+              format: 'webp',
+              use_filename: true,
+              unique_filename: true,
+              overwrite: false,
+            });
+            if (res) {
+              payload.img = res.secure_url || res.url;
+              payload.imgPublicId = res.public_id || null;
+            }
+          } catch (e) {
+            // if upload fails, keep original URL and continue
+            console.warn('Failed to migrate primary image to Cloudinary:', e.message || e);
+          }
+        }
+      }
     }
 
     // Handle multiple images array
@@ -191,11 +296,42 @@ exports.createProduct = async (req, res, next) => {
       const processedImages = [];
       for (const item of payload.images) {
         if (item && item.base64 && typeof item.base64 === 'string' && item.base64.startsWith('data:')) {
-          const url = await saveBase64Image(item.base64);
-          processedImages.push({ url, base64: item.base64 });
-        } else if (item && (item.url || item.base64)) {
-          // preserve provided url/base64 fields
-          processedImages.push({ url: item.url || null, base64: item.base64 || null });
+          const urlRes = await saveBase64Image(item.base64);
+          processedImages.push({ url: urlRes.url, public_id: urlRes.public_id || null });
+        } else if (item && item.url) {
+          // If local multer file path -> upload
+          if (typeof item.url === 'string' && (item.url.startsWith('/uploads/') || item.url.includes('uploads'))) {
+            const up = await uploadLocalFileToCloudinary(item.url);
+            processedImages.push({ url: up.url, public_id: up.public_id || null });
+          } else if (typeof item.url === 'string' && cloudinaryConfigured) {
+            // If already a Cloudinary URL, extract public id if missing
+            if (item.url.includes('res.cloudinary.com')) {
+              const pub = item.public_id || extractCloudinaryPublicIdFromUrl(item.url) || null;
+              processedImages.push({ url: item.url, public_id: pub });
+            } else {
+              // Remote non-Cloudinary URL -> upload it to Cloudinary so all images are Cloudinary-hosted
+              try {
+                const res = await cloudinary.uploader.upload(item.url, {
+                  folder: 'products',
+                  resource_type: 'image',
+                  format: 'webp',
+                  use_filename: true,
+                  unique_filename: true,
+                  overwrite: false,
+                });
+                if (res) processedImages.push({ url: res.secure_url || res.url, public_id: res.public_id || null });
+                else processedImages.push({ url: item.url || null, public_id: item.public_id || null });
+              } catch (e) {
+                // fallback: keep original url if upload fails
+                console.warn('Failed to migrate gallery image to Cloudinary:', e.message || e);
+                processedImages.push({ url: item.url || null, public_id: item.public_id || null });
+              }
+            }
+          } else {
+            // Cloudinary not configured or unknown type -> keep as-is
+            let pub = item.public_id || null;
+            processedImages.push({ url: item.url || null, public_id: pub });
+          }
         }
       }
       payload.images = processedImages;
@@ -276,12 +412,48 @@ exports.updateProduct = async (req, res, next) => {
     }
 
     let newImgPath = null;
+    let newImgPublicId = null;
 
     // Handle primary image update
-    if (payload.img && typeof payload.img === 'string' && payload.img.startsWith('data:')) {
-      payload.imgBase64 = payload.img;
-      newImgPath = await saveBase64Image(payload.img);
-      payload.img = newImgPath;
+    if (payload.img && typeof payload.img === 'string') {
+      if (payload.img.startsWith('data:')) {
+        payload.imgBase64 = payload.img;
+        const imgRes = await saveBase64Image(payload.img);
+        newImgPath = imgRes.url; newImgPublicId = imgRes.public_id || null;
+        payload.img = newImgPath; if (newImgPublicId) payload.imgPublicId = newImgPublicId;
+      } else if (payload.img.startsWith('/uploads/') || payload.img.includes('uploads')) {
+        const up = await uploadLocalFileToCloudinary(payload.img);
+        newImgPath = up.url; newImgPublicId = up.public_id || null;
+        payload.img = newImgPath; if (newImgPublicId) payload.imgPublicId = newImgPublicId;
+      } else if (cloudinaryConfigured) {
+        // Remote URL: ensure it's stored on Cloudinary. If already a Cloudinary URL, try extract public id.
+        if (payload.img.includes('res.cloudinary.com')) {
+          if (!payload.imgPublicId) {
+            const extracted = extractCloudinaryPublicIdFromUrl(payload.img);
+            if (extracted) payload.imgPublicId = extracted;
+          }
+          // leave payload.img as-is (already on Cloudinary)
+        } else {
+          // Not a Cloudinary URL; upload remote URL to Cloudinary so we store a Cloudinary-hosted image
+          try {
+            const res = await cloudinary.uploader.upload(payload.img, {
+              folder: 'products',
+              resource_type: 'image',
+              format: 'webp',
+              use_filename: true,
+              unique_filename: true,
+              overwrite: false,
+            });
+            if (res) {
+              payload.img = res.secure_url || res.url;
+              payload.imgPublicId = res.public_id || null;
+            }
+          } catch (e) {
+            // if upload fails, keep original URL and continue
+            console.warn('Failed to migrate primary image to Cloudinary:', e.message || e);
+          }
+        }
+      }
     }
 
     // Handle multiple images array update
@@ -289,10 +461,42 @@ exports.updateProduct = async (req, res, next) => {
       const processedImages = [];
       for (const item of payload.images) {
         if (item && item.base64 && typeof item.base64 === 'string' && item.base64.startsWith('data:')) {
-          const url = await saveBase64Image(item.base64);
-          processedImages.push({ url, base64: item.base64 });
-        } else if (item && (item.url || item.base64)) {
-          processedImages.push({ url: item.url || null, base64: item.base64 || null });
+          const urlRes = await saveBase64Image(item.base64);
+          processedImages.push({ url: urlRes.url, public_id: urlRes.public_id || null });
+        } else if (item && item.url) {
+          // If local multer file path -> upload
+          if (typeof item.url === 'string' && (item.url.startsWith('/uploads/') || item.url.includes('uploads'))) {
+            const up = await uploadLocalFileToCloudinary(item.url);
+            processedImages.push({ url: up.url, public_id: up.public_id || null });
+          } else if (typeof item.url === 'string' && cloudinaryConfigured) {
+            // If already a Cloudinary URL, extract public id if missing
+            if (item.url.includes('res.cloudinary.com')) {
+              const pub = item.public_id || extractCloudinaryPublicIdFromUrl(item.url) || null;
+              processedImages.push({ url: item.url, public_id: pub });
+            } else {
+              // Remote non-Cloudinary URL -> upload it to Cloudinary so all images are Cloudinary-hosted
+              try {
+                const res = await cloudinary.uploader.upload(item.url, {
+                  folder: 'products',
+                  resource_type: 'image',
+                  format: 'webp',
+                  use_filename: true,
+                  unique_filename: true,
+                  overwrite: false,
+                });
+                if (res) processedImages.push({ url: res.secure_url || res.url, public_id: res.public_id || null });
+                else processedImages.push({ url: item.url || null, public_id: item.public_id || null });
+              } catch (e) {
+                // fallback: keep original url if upload fails
+                console.warn('Failed to migrate gallery image to Cloudinary:', e.message || e);
+                processedImages.push({ url: item.url || null, public_id: item.public_id || null });
+              }
+            }
+          } else {
+            // Cloudinary not configured or unknown type -> keep as-is
+            let pub = item.public_id || null;
+            processedImages.push({ url: item.url || null, public_id: pub });
+          }
         }
       }
       payload.images = processedImages;
@@ -307,11 +511,18 @@ exports.updateProduct = async (req, res, next) => {
     const updated = await Product.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true, context: 'query' });
 
     // Cleanup old primary image if replaced
-    if (newImgPath && existing.img && typeof existing.img === 'string' && existing.img.startsWith('/uploads/')) {
+    if (newImgPath && existing.img && typeof existing.img === 'string') {
       try {
-        const oldRel = existing.img.replace(/^\//, '');
-        const oldPath = path.join(__dirname, '..', oldRel);
-        await fs.promises.unlink(oldPath).catch(() => {});
+        // if existing image was stored locally, remove file
+        if (existing.img.startsWith('/uploads/')) {
+          const oldRel = existing.img.replace(/^\//, '');
+          const oldPath = path.join(__dirname, '..', oldRel);
+          await fs.promises.unlink(oldPath).catch(() => {});
+        }
+        // if existing image was on Cloudinary and we have its public id, try deleting it when replaced
+        if (cloudinaryConfigured && existing.imgPublicId) {
+          try { await cloudinary.uploader.destroy(existing.imgPublicId, { resource_type: 'image' }); } catch (e) { /* ignore */ }
+        }
       } catch (e) { /* ignore */ }
     }
 
