@@ -2,6 +2,8 @@ const Order = require('../Models/Order');
 const path = require('path');
 const fs = require('fs');
 const sharp = require('sharp');
+const { sendEmail } = require('../config/emailService');
+const Customer = require('../Models/Customer');
 
 exports.createOrder = async (req, res, next) => {
   try {
@@ -113,6 +115,37 @@ exports.updateOrderStatus = async (req, res, next) => {
 
     if (!updatedOrder) {
       return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+
+    // Send email notification to customer when out_for_delivery
+    try {
+      if (status === 'out_for_delivery') {
+        // Try order-level email first
+        let recipientEmail = updatedOrder.email || updatedOrder.customerEmail || '';
+
+        // If no email on order, try to find customer by phone
+        if (!recipientEmail && updatedOrder.mobile) {
+          const cust = await Customer.findOne({ phone: String(updatedOrder.mobile).trim() });
+          if (cust && cust.email) recipientEmail = cust.email;
+        }
+
+        if (recipientEmail) {
+          const driverName = updatedOrder.deliveryPartner || 'Courier';
+          const driverPhone = updatedOrder.deliveryPartnerPhone || 'N/A';
+          const eta = updatedOrder.deliveryEstimatedTime || 'Pending';
+          const orderIdShort = String(updatedOrder._id || updatedOrder.id).slice(-6);
+
+          const subject = `Aapka order #ORD-${orderIdShort} ab delivery par hai`;
+          const message = `Namaste ${updatedOrder.name || ''},\n\nAapke order #ORD-${orderIdShort} ke liye delivery partner assign ho gaya hai.\n\nDriver: ${driverName}\nPhone: ${driverPhone}\nETA: ${eta}\n\nDhanyavaad — Bakery Team`;
+          const html = `<p>Namaste ${updatedOrder.name || ''},</p><p>Aapke order <strong>#ORD-${orderIdShort}</strong> ke liye delivery partner assign ho gaya hai.</p><ul><li><strong>Driver:</strong> ${driverName}</li><li><strong>Phone:</strong> ${driverPhone}</li><li><strong>ETA:</strong> ${eta}</li></ul><p>Dhanyavaad — <em>Bakery Team</em></p>`;
+
+          await sendEmail({ email: recipientEmail, subject, message, html });
+        } else {
+          console.warn('No customer email found; skipping email notification for order', updatedOrder._id || id);
+        }
+      }
+    } catch (emailErr) {
+      console.error('Failed to send delivery email:', emailErr.message || emailErr);
     }
 
     res.json({ success: true, message: 'Order status updated successfully', order: updatedOrder });
