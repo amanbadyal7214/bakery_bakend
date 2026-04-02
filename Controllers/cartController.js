@@ -15,17 +15,35 @@ const resolveImage = (product) => {
   return '/placeholder.svg';
 };
 
-const serializeCart = (cartDoc) => {
+// Serialize cart and enrich items with up-to-date product info (price, stock, image)
+const serializeCart = async (cartDoc) => {
   const safeItems = Array.isArray(cartDoc?.items) ? cartDoc.items : [];
-  const items = safeItems.map((item) => ({
-    id: String(item.productId),
-    name: item.name,
-    category: item.category || 'Bakery',
-    image: item.image || '/placeholder.svg',
-    price: Number(item.unitPrice) || 0,
-    stock: 999,
-    quantity: Number(item.quantity) || 1,
-  }));
+  const items = [];
+
+  for (const item of safeItems) {
+    const prodId = item.productId;
+    let product = null;
+    try {
+      product = await Product.findById(prodId).select('price stock img images name category').lean();
+    } catch (e) {
+      product = null;
+    }
+
+    const price = Number(item.unitPrice) || (product ? Number(product.price) || 0 : 0);
+    const quantity = Number(item.quantity) || 1;
+    const image = item.image || (product ? (product.img || (Array.isArray(product.images) && product.images[0] && product.images[0].url) || '/placeholder.svg') : '/placeholder.svg');
+    const stock = typeof (product && product.stock) === 'number' ? product.stock : 0;
+
+    items.push({
+      id: String(prodId),
+      name: item.name || (product ? product.name : ''),
+      category: item.category || (product ? product.category || 'Bakery' : 'Bakery'),
+      image,
+      price,
+      stock,
+      quantity,
+    });
+  }
 
   const itemsCount = items.reduce((acc, item) => acc + item.quantity, 0);
   const subtotal = items.reduce((acc, item) => acc + item.price * item.quantity, 0);
@@ -54,7 +72,8 @@ exports.getCart = async (req, res) => {
     }
 
     const cart = await getOrCreateCart(req.user.id);
-    return res.json({ cart: serializeCart(cart) });
+    const serialized = await serializeCart(cart);
+    return res.json({ cart: serialized });
   } catch (error) {
     console.error('Get Cart Error:', error);
     return res.status(500).json({ error: 'Failed to fetch cart' });
@@ -73,8 +92,13 @@ exports.addItem = async (req, res) => {
     }
 
     const qtyToAdd = Math.max(1, Math.floor(Number(quantity) || 1));
-    const product = await Product.findById(productId);
+    const product = await Product.findById(productId).select('price stock name img images category');
     if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    // Disallow adding when out of stock
+    if (typeof product.stock === 'number' && product.stock <= 0) {
+      return res.status(400).json({ error: `Product "${product.name || productId}" is out of stock` });
+    }
 
     const cart = await getOrCreateCart(req.user.id);
     const existingIndex = cart.items.findIndex(
@@ -83,12 +107,21 @@ exports.addItem = async (req, res) => {
 
     if (existingIndex >= 0) {
       const existing = cart.items[existingIndex];
-      existing.quantity = Math.min(MAX_QTY_PER_ITEM, existing.quantity + qtyToAdd);
+      const newQty = Math.min(MAX_QTY_PER_ITEM, existing.quantity + qtyToAdd);
+      // Prevent increasing beyond available stock
+      if (typeof product.stock === 'number' && newQty > product.stock) {
+        return res.status(400).json({ error: `Only ${product.stock} unit(s) available for "${product.name || productId}"` });
+      }
+      existing.quantity = newQty;
       existing.unitPrice = Number(product.price) || 0;
       existing.name = product.name;
       existing.category = product.category || 'Bakery';
       existing.image = resolveImage(product);
     } else {
+      // Ensure requested quantity does not exceed stock
+      if (typeof product.stock === 'number' && qtyToAdd > product.stock) {
+        return res.status(400).json({ error: `Only ${product.stock} unit(s) available for "${product.name || productId}"` });
+      }
       cart.items.push({
         productId: product._id,
         name: product.name,
@@ -100,7 +133,8 @@ exports.addItem = async (req, res) => {
     }
 
     await cart.save();
-    return res.status(201).json({ message: 'Item added to cart', cart: serializeCart(cart) });
+    const serialized = await serializeCart(cart);
+    return res.status(201).json({ message: 'Item added to cart', cart: serialized });
   } catch (error) {
     console.error('Add Item Error:', error);
     return res.status(500).json({ error: 'Failed to add item to cart' });
@@ -128,14 +162,23 @@ exports.setItemQuantity = async (req, res) => {
       return res.status(404).json({ error: 'Item not found in cart' });
     }
 
+    // Fetch current product stock
+    const product = await Product.findById(productId).select('stock name');
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+
     if (normalizedQty <= 0) {
       cart.items.splice(index, 1);
     } else {
+      // Prevent setting quantity beyond stock
+      if (typeof product.stock === 'number' && normalizedQty > product.stock) {
+        return res.status(400).json({ error: `Only ${product.stock} unit(s) available for "${product.name || productId}"` });
+      }
       cart.items[index].quantity = Math.min(MAX_QTY_PER_ITEM, normalizedQty);
     }
 
     await cart.save();
-    return res.json({ message: 'Cart updated', cart: serializeCart(cart) });
+    const serialized = await serializeCart(cart);
+    return res.json({ message: 'Cart updated', cart: serialized });
   } catch (error) {
     console.error('Set Quantity Error:', error);
     return res.status(500).json({ error: 'Failed to update item quantity' });
@@ -157,7 +200,8 @@ exports.removeItem = async (req, res) => {
     cart.items = cart.items.filter((item) => String(item.productId) !== String(productId));
     await cart.save();
 
-    return res.json({ message: 'Item removed from cart', cart: serializeCart(cart) });
+    const serialized = await serializeCart(cart);
+    return res.json({ message: 'Item removed from cart', cart: serialized });
   } catch (error) {
     console.error('Remove Item Error:', error);
     return res.status(500).json({ error: 'Failed to remove item from cart' });
@@ -174,7 +218,8 @@ exports.clearCart = async (req, res) => {
     cart.items = [];
     await cart.save();
 
-    return res.json({ message: 'Cart cleared', cart: serializeCart(cart) });
+    const serialized = await serializeCart(cart);
+    return res.json({ message: 'Cart cleared', cart: serialized });
   } catch (error) {
     console.error('Clear Cart Error:', error);
     return res.status(500).json({ error: 'Failed to clear cart' });
