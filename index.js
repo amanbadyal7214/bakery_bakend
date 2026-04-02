@@ -28,6 +28,7 @@ const ingredientRoutes = require('./Routes/ingredientRoutes');
 const ingredientDetailRoutes = require('./Routes/ingredientDetailRoutes');
 const permissionRoutes = require('./Routes/permissionRoutes');
 const roleRoutes = require('./Routes/roleRoutes');
+const paymentModeRoutes = require('./Routes/paymentModeRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -69,6 +70,7 @@ app.use('/api/ingredients', ingredientRoutes);
 app.use('/api/ingredient-details', ingredientDetailRoutes);
 app.use('/api/permissions', permissionRoutes);
 app.use('/api/roles', roleRoutes);
+app.use('/api/payment-modes', paymentModeRoutes);
 
 // Global error handler
 app.use((err, req, res, next) => {

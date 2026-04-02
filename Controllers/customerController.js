@@ -195,6 +195,93 @@ exports.me = async (req, res) => {
   }
 };
 
+// --- Password reset via OTP ---
+
+// Send OTP for password reset (only for existing customers)
+exports.sendResetOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Ensure customer exists
+    const customer = await Customer.findOne({ email: normalizedEmail });
+    if (!customer) {
+      return res.status(400).json({ error: 'No account found for this email' });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes for reset
+    otpStore.set(`reset:${normalizedEmail}`, { otp, expiresAt });
+
+    await sendEmail(
+      normalizedEmail,
+      'Your Password Reset OTP',
+      `You requested a password reset. Your OTP is: ${otp}. It expires in 10 minutes.`
+    );
+
+    res.json({ message: 'Password reset OTP sent successfully' });
+  } catch (error) {
+    console.error('Send Reset OTP Error:', error);
+    res.status(500).json({ error: 'Failed to send password reset OTP' });
+  }
+};
+
+// Verify reset OTP
+exports.verifyResetOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ error: 'Email and OTP are required' });
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const stored = otpStore.get(`reset:${normalizedEmail}`);
+    if (!stored) return res.status(400).json({ error: 'OTP expired or not found. Request a new one.' });
+    if (Date.now() > stored.expiresAt) {
+      otpStore.delete(`reset:${normalizedEmail}`);
+      return res.status(400).json({ error: 'OTP expired. Please request a new one.' });
+    }
+    if (stored.otp !== otp) return res.status(400).json({ error: 'Invalid OTP' });
+
+    // Keep OTP until reset is completed, but indicate verification success
+    res.json({ message: 'OTP verified' });
+  } catch (error) {
+    console.error('Verify Reset OTP Error:', error);
+    res.status(500).json({ error: 'Failed to verify OTP' });
+  }
+};
+
+// Reset password using OTP
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) return res.status(400).json({ error: 'Email, OTP and new password are required' });
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const stored = otpStore.get(`reset:${normalizedEmail}`);
+    if (!stored) return res.status(400).json({ error: 'OTP expired or not found. Request a new one.' });
+    if (Date.now() > stored.expiresAt) {
+      otpStore.delete(`reset:${normalizedEmail}`);
+      return res.status(400).json({ error: 'OTP expired. Please request a new one.' });
+    }
+    if (stored.otp !== otp) return res.status(400).json({ error: 'Invalid OTP' });
+
+    const customer = await Customer.findOne({ email: normalizedEmail });
+    if (!customer) return res.status(400).json({ error: 'No account found for this email' });
+
+    await customer.setPassword(newPassword);
+    await customer.save();
+
+    // Clear OTP after successful reset
+    otpStore.delete(`reset:${normalizedEmail}`);
+
+    res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('Reset Password Error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
+};
+
 exports.getAllCustomers = async (req, res) => {
   try {
     // Allow admins/superadmins to fetch all customers
