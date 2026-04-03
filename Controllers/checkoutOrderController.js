@@ -52,11 +52,25 @@ exports.placeOrder = async (req, res) => {
       const price = Number(item.unitPrice) || 0;
       const quantity = Math.max(1, Number(item.quantity) || 1);
       const productId = item.productId;
-      // Fetch latest product stock
-      const product = await Product.findById(productId).select('name stock price category img images');
+      // Fetch latest product stock along with variants
+      const product = await Product.findById(productId);
       if (!product) return res.status(404).json({ error: `Product not found for id ${productId}` });
-      if (typeof product.stock === 'number' && product.stock < quantity) {
-        return res.status(400).json({ error: `Insufficient stock for product "${product.name || productId}". Requested ${quantity}, available ${product.stock}` });
+      
+      const requestedVariantName = item.name || product.name;
+      let matchedVariantEarly = null;
+      if (product.variants && product.variants.length > 0 && requestedVariantName) {
+          const matchEarly = String(requestedVariantName).match(/\(([^,]+),\s*([^)]+)\)$/);
+          if (matchEarly) {
+              const srchWeight = matchEarly[2].trim();
+              matchedVariantEarly = product.variants.find(v => String(v.weight).toLowerCase() === srchWeight.toLowerCase());
+          } else {
+              matchedVariantEarly = product.variants.find(v => String(requestedVariantName).includes(v.weight));
+          }
+      }
+
+      const evalStock = matchedVariantEarly ? Number(matchedVariantEarly.stock) : Number(product.stock);
+      if (typeof evalStock === 'number' && evalStock < quantity) {
+        return res.status(400).json({ error: `Insufficient stock for product/variant "${requestedVariantName}". Requested ${quantity}, available ${evalStock}` });
       }
 
       items.push({
@@ -79,17 +93,38 @@ exports.placeOrder = async (req, res) => {
     session = await mongoose.startSession();
     let createdOrder = null;
     await session.withTransaction(async () => {
-      // Decrement stock for each item using a conditional update to avoid negative stock on race
+      // Decrement stock for each item using a session-aware document retrieval and save process
       for (const it of items) {
-        const updated = await Product.findOneAndUpdate(
-          { _id: it.productId, $expr: { $gte: ["$stock", it.quantity] } },
-          { $inc: { stock: -it.quantity } },
-          { new: true, session }
-        );
-        if (!updated) {
-          // abort transaction by throwing
-          throw new Error(`Insufficient stock during update for product ${it.name || it.productId}`);
+        const prod = await Product.findById(it.productId).session(session);
+        if (!prod) {
+            throw new Error(`Product not found during checkout stock allocation for ${it.name}`);
         }
+
+        let matchedVariant = null;
+        if (prod.variants && prod.variants.length > 0 && it.name) {
+            const match = String(it.name).match(/\(([^,]+),\s*([^)]+)\)$/);
+            if (match) {
+                const searchWeight = match[2].trim();
+                matchedVariant = prod.variants.find(v => String(v.weight).toLowerCase() === searchWeight.toLowerCase());
+            } else {
+                matchedVariant = prod.variants.find(v => String(it.name).includes(v.weight));
+            }
+        }
+
+        // Validate constraint levels securely
+        if (matchedVariant) {
+            if (Number(matchedVariant.stock) < it.quantity) {
+                 throw new Error(`Insufficient stock during update for variant "${it.name}". Requested ${it.quantity}, available ${matchedVariant.stock}`);
+            }
+            matchedVariant.stock -= it.quantity;
+        } else {
+            if (Number(prod.stock) < it.quantity) {
+                 throw new Error(`Insufficient stock during update for product "${prod.name}". Requested ${it.quantity}, available ${prod.stock}`);
+            }
+        }
+        
+        prod.stock -= it.quantity;
+        await prod.save({ session });
       }
 
       // Create order within the same session
@@ -221,6 +256,13 @@ exports.updateOrderStatus = async (req, res) => {
       return res.status(400).json({ error: 'Delivery partner name and phone are required for out_for_delivery status' });
     }
 
+    const existingOrder = await CheckoutOrder.findById(resolvedOrderId);
+    if (!existingOrder) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const isCancelling = existingOrder.orderStatus !== 'cancelled' && status === 'cancelled';
+
     const updateData = { orderStatus: status };
     if (status === 'out_for_delivery') {
       updateData.deliveryPartner = String(deliveryPartner).trim();
@@ -234,8 +276,33 @@ exports.updateOrderStatus = async (req, res) => {
       { new: true }
     );
 
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
+    // Replenish stock upon cancellation
+    if (isCancelling && order && Array.isArray(order.items)) {
+        for (const it of order.items) {
+           try {
+             const prod = await Product.findById(it.productId);
+             if (!prod) continue;
+
+             let matchedVariant = null;
+             if (prod.variants && prod.variants.length > 0 && it.name) {
+                 const match = String(it.name).match(/\(([^,]+),\s*([^)]+)\)$/);
+                 if (match) {
+                     const searchWeight = match[2].trim();
+                     matchedVariant = prod.variants.find(v => String(v.weight).toLowerCase() === searchWeight.toLowerCase());
+                 } else {
+                     matchedVariant = prod.variants.find(v => String(it.name).includes(v.weight));
+                 }
+             }
+
+             if (matchedVariant) {
+                 matchedVariant.stock = Number(matchedVariant.stock) + it.quantity;
+             }
+             prod.stock = Number(prod.stock) + it.quantity;
+             await prod.save();
+           } catch (err) {
+             console.error('Stock replenishment error on cancellation for product', it.productId, err);
+           }
+        }
     }
 
     // Send email notification to customer when out_for_delivery or delivered
