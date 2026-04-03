@@ -242,6 +242,23 @@ exports.createProduct = async (req, res, next) => {
     payload.dietary = ensureArray(payload.dietary);
     payload.ingredients = ensureArray(payload.ingredients);
 
+    // Handle variants: [{weight, price, stock}]
+    if (payload.variants && Array.isArray(payload.variants)) {
+      payload.weight = payload.variants.map(v => String(v.weight));
+      payload.pricesByWeight = payload.variants.map(v => Number(v.price));
+      // derive total stock as sum of all variant stocks
+      const variantStockTotal = payload.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+      if (variantStockTotal > 0) payload.stock = variantStockTotal;
+      // if price not set, use first variant
+      if (payload.variants.length > 0 && (!payload.price || Number(payload.price) === 0)) {
+        payload.price = Number(payload.variants[0].price);
+      }
+    } else if (payload.weight && payload.weight.length > 0 && payload.price) {
+      // compatibility: if they send weight array and single price, assume first weight is that price
+      payload.pricesByWeight = payload.weight.map((_, i) => i === 0 ? Number(payload.price) : 0);
+      payload.variants = payload.weight.map((w, i) => ({ weight: w, price: payload.pricesByWeight[i], stock: 0 }));
+    }
+
     // Coerce shape/theme to string if arrays were sent (frontend can send single-value arrays)
     if (Array.isArray(payload.shape)) payload.shape = payload.shape.length ? String(payload.shape[0]) : '';
     else if (payload.shape === undefined || payload.shape === null) payload.shape = '';
@@ -387,6 +404,22 @@ exports.updateProduct = async (req, res, next) => {
     if (payload.delivery !== undefined) payload.delivery = ensureArray(payload.delivery);
     if (payload.dietary !== undefined) payload.dietary = ensureArray(payload.dietary);
     if (payload.ingredients !== undefined) payload.ingredients = ensureArray(payload.ingredients);
+
+    // Handle variants update
+    if (payload.variants !== undefined && Array.isArray(payload.variants)) {
+      payload.weight = payload.variants.map(v => String(v.weight));
+      payload.pricesByWeight = payload.variants.map(v => Number(v.price));
+      // derive total stock as sum of all variant stocks
+      const variantStockTotal = payload.variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+      if (variantStockTotal > 0) payload.stock = variantStockTotal;
+      if (payload.variants.length > 0 && (!payload.price || Number(payload.price) === 0)) {
+        payload.price = Number(payload.variants[0].price);
+      }
+    } else if (payload.weight !== undefined && payload.price !== undefined) {
+      payload.weight = ensureArray(payload.weight);
+      payload.pricesByWeight = payload.weight.map((_, i) => i === 0 ? Number(payload.price) : 0);
+      payload.variants = payload.weight.map((w, i) => ({ weight: w, price: payload.pricesByWeight[i], stock: 0 }));
+    }
 
     // Coerce shape/theme to string if arrays or comma-separated values were sent
     if (payload.shape !== undefined) {

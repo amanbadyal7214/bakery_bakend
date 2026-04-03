@@ -17,6 +17,12 @@ const ProductSchema = new mongoose.Schema({
   type: { type: [String], default: [] },
   occasion: { type: [String], default: [] },
   weight: { type: [String], default: [] },
+  pricesByWeight: { type: [Number], default: [] },
+  variants: [{
+    weight: String,
+    price: Number,
+    stock: { type: Number, default: 0 }
+  }],
   delivery: { type: [String], default: [] },
   dietary: { type: [String], default: [] },
   shape: { type: String },

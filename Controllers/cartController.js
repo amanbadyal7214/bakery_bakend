@@ -24,7 +24,7 @@ const serializeCart = async (cartDoc) => {
     const prodId = item.productId;
     let product = null;
     try {
-      product = await Product.findById(prodId).select('price stock img images name category').lean();
+      product = await Product.findById(prodId).select('price stock img images name category variants').lean();
     } catch (e) {
       product = null;
     }
@@ -42,6 +42,7 @@ const serializeCart = async (cartDoc) => {
       price,
       stock,
       quantity,
+      variants: product ? product.variants : [],
     });
   }
 
@@ -86,7 +87,7 @@ exports.addItem = async (req, res) => {
       return res.status(403).json({ error: 'Only customers can modify cart' });
     }
 
-    const { productId, quantity = 1 } = req.body;
+    const { productId, quantity = 1, name, stock: reqStock, price: reqPrice } = req.body;
     if (!productId || !mongoose.Types.ObjectId.isValid(String(productId))) {
       return res.status(400).json({ error: 'Valid productId is required' });
     }
@@ -95,39 +96,43 @@ exports.addItem = async (req, res) => {
     const product = await Product.findById(productId).select('price stock name img images category');
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
+    // Prefer specific variant stock if sent from the frontend, else use global aggregate stock
+    const limitStock = typeof reqStock === 'number' ? reqStock : product.stock;
+
     // Disallow adding when out of stock
-    if (typeof product.stock === 'number' && product.stock <= 0) {
-      return res.status(400).json({ error: `Product "${product.name || productId}" is out of stock` });
+    if (typeof limitStock === 'number' && limitStock <= 0) {
+      return res.status(400).json({ error: `Product "${name || product.name || productId}" is out of stock` });
     }
 
     const cart = await getOrCreateCart(req.user.id);
     const existingIndex = cart.items.findIndex(
-      (item) => String(item.productId) === String(product._id)
+      (item) => String(item.productId) === String(product._id) && (!name || item.name === name)
     );
 
     if (existingIndex >= 0) {
       const existing = cart.items[existingIndex];
       const newQty = Math.min(MAX_QTY_PER_ITEM, existing.quantity + qtyToAdd);
       // Prevent increasing beyond available stock
-      if (typeof product.stock === 'number' && newQty > product.stock) {
-        return res.status(400).json({ error: `Only ${product.stock} unit(s) available for "${product.name || productId}"` });
+      if (typeof limitStock === 'number' && newQty > limitStock) {
+        return res.status(400).json({ error: `Only ${limitStock} unit(s) available for "${name || product.name || productId}"` });
       }
       existing.quantity = newQty;
-      existing.unitPrice = Number(product.price) || 0;
-      existing.name = product.name;
+      // if price wasn't originally overridden, use backend price
+      existing.unitPrice = reqPrice !== undefined ? Number(reqPrice) : (Number(product.price) || 0);
+      existing.name = name || product.name;
       existing.category = product.category || 'Bakery';
       existing.image = resolveImage(product);
     } else {
       // Ensure requested quantity does not exceed stock
-      if (typeof product.stock === 'number' && qtyToAdd > product.stock) {
-        return res.status(400).json({ error: `Only ${product.stock} unit(s) available for "${product.name || productId}"` });
+      if (typeof limitStock === 'number' && qtyToAdd > limitStock) {
+        return res.status(400).json({ error: `Only ${limitStock} unit(s) available for "${name || product.name || productId}"` });
       }
       cart.items.push({
         productId: product._id,
-        name: product.name,
+        name: name || product.name,
         category: product.category || 'Bakery',
         image: resolveImage(product),
-        unitPrice: Number(product.price) || 0,
+        unitPrice: reqPrice !== undefined ? Number(reqPrice) : (Number(product.price) || 0),
         quantity: Math.min(MAX_QTY_PER_ITEM, qtyToAdd),
       });
     }
@@ -162,16 +167,34 @@ exports.setItemQuantity = async (req, res) => {
       return res.status(404).json({ error: 'Item not found in cart' });
     }
 
+    // Identify the specific item to see if it has a variant name indicating actual limits
+    const targetItem = cart.items[index];
+    const itemTargetName = targetItem.name;
+
     // Fetch current product stock
-    const product = await Product.findById(productId).select('stock name');
+    const product = await Product.findById(productId).select('stock name variants');
     if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    let limitStock = product.stock;
+    if (product.variants && product.variants.length > 0 && itemTargetName) {
+        // Evaluate dynamic limit
+        const match = itemTargetName.match(/\(([^,]+),\s*([^)]+)\)$/);
+        if (match) {
+            const variantWeight = match[2].trim();
+            const variant = product.variants.find(v => String(v.weight).toLowerCase() === variantWeight.toLowerCase());
+            if (variant && typeof variant.stock !== 'undefined') limitStock = variant.stock;
+        } else {
+            const variant = product.variants.find(v => itemTargetName.includes(v.weight));
+            if (variant && typeof variant.stock !== 'undefined') limitStock = variant.stock;
+        }
+    }
 
     if (normalizedQty <= 0) {
       cart.items.splice(index, 1);
     } else {
       // Prevent setting quantity beyond stock
-      if (typeof product.stock === 'number' && normalizedQty > product.stock) {
-        return res.status(400).json({ error: `Only ${product.stock} unit(s) available for "${product.name || productId}"` });
+      if (typeof limitStock === 'number' && normalizedQty > limitStock) {
+        return res.status(400).json({ error: `Only ${limitStock} unit(s) available for "${itemTargetName || product.name}"` });
       }
       cart.items[index].quantity = Math.min(MAX_QTY_PER_ITEM, normalizedQty);
     }
