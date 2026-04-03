@@ -6,8 +6,7 @@ const { sendEmail } = require('../config/emailService');
 const otpStore = new Map(); // Simple in-memory cache for OTPs
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change_this_secret';
-// const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY || "6LfpTaQsAAAAAKD3GHrYuA0j9hWTfalmLT4a7Wmm";
-const RECAPTCHA_SECRET_KEY = "6LfpTaQsAAAAAKD3GHrYuA0j9hWTfalmLT4a7Wmm";
+ const RECAPTCHA_SECRET_KEY = process.env.RECAPTCHA_SECRET_KEY || "6LfpTaQsAAAAAKD3GHrYuA0j9hWTfalmLT4a7Wmm";
 // Helper function to verify reCAPTCHA token
 const verifyRecaptcha = async (token) => {
   try {
