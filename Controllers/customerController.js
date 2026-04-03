@@ -22,14 +22,28 @@ const verifyRecaptcha = async (token) => {
     );
 
     const { success, score } = response.data;
-    // score ranges from 0.0 to 1.0, where 1.0 is very likely a legitimate interaction
-    // We'll accept if success is true and score is above 0.5
-    return success && score > 0.5;
+    
+    // Log the response for debugging purposes
+    console.log('reCAPTCHA response from Google:', response.data);
+
+    // reCAPTCHA v2 doesn't have a score, it just has success: true/false
+    // reCAPTCHA v3 has success and a score (0.0 to 1.0)
+    if (success) {
+      // If score is present (v3), check if it's high enough
+      if (score !== undefined) {
+        return score > 0.5;
+      }
+      // If no score (v2), just return success
+      return true;
+    }
+    
+    return false;
   } catch (error) {
     console.error('reCAPTCHA Verification Error:', error);
     return false;
   }
 };
+
 
 exports.sendOtp = async (req, res) => {
   try {
