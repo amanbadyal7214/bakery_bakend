@@ -46,7 +46,12 @@ exports.login = async (req, res) => {
     const superEmail = process.env.SUPER_ADMIN_EMAIL || process.env.SUPERADMIN_EMAIL;
     const superPassword = process.env.SUPER_ADMIN_PASSWORD || process.env.SUPERADMIN_PASSWORD;
     if (superEmail && superPassword && normalized === superEmail.toLowerCase().trim() && password === superPassword) {
-      const token = jwt.sign({ id: 'superadmin', email: superEmail.toLowerCase().trim(), role: 'superadmin' }, JWT_SECRET, { expiresIn: '8h' });
+      const token = jwt.sign({ 
+        id: 'superadmin', 
+        email: superEmail.toLowerCase().trim(), 
+        name: 'Super Admin', 
+        role: 'superadmin' 
+      }, JWT_SECRET, { expiresIn: '8h' });
       return res.json({ token, role: 'superadmin', expiresIn: 8 * 60 * 60 });
     }
 
@@ -59,7 +64,13 @@ exports.login = async (req, res) => {
 
     const normalizedPermissions = await normalizeUserPermissions(user);
 
-    const token = jwt.sign({ id: user._id, email: user.email, role: user.role, permissions: normalizedPermissions }, JWT_SECRET, { expiresIn: '8h' });
+    const token = jwt.sign({ 
+      id: user._id, 
+      email: user.email, 
+      name: user.name || user.email, 
+      role: user.role, 
+      permissions: normalizedPermissions 
+    }, JWT_SECRET, { expiresIn: '8h' });
     return res.json({ 
       token, 
       role: user.role,

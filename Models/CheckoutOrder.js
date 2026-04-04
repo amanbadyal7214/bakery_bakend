@@ -31,6 +31,8 @@ const CheckoutOrderSchema = new mongoose.Schema(
     deliveryPartner: { type: String, trim: true, default: '' },
     deliveryPartnerPhone: { type: String, trim: true, default: '' },
     deliveryEstimatedTime: { type: String, trim: true, default: '' },
+    cancelReason: { type: String, trim: true, default: '' },
+    statusUpdatedBy: { type: String, trim: true, default: '' },
   },
   { timestamps: true }
 );

@@ -221,7 +221,7 @@ exports.updateOrderStatus = async (req, res) => {
     }
 
     const { orderId } = req.params;
-    const { status, deliveryPartner, deliveryPartnerPhone, deliveryEstimatedTime } = req.body;
+    const { status, deliveryPartner, deliveryPartnerPhone, deliveryEstimatedTime, cancelReason } = req.body;
 
     if (!status) {
       return res.status(400).json({ error: 'Status is required' });
@@ -268,6 +268,14 @@ exports.updateOrderStatus = async (req, res) => {
       updateData.deliveryPartner = String(deliveryPartner).trim();
       updateData.deliveryPartnerPhone = String(deliveryPartnerPhone).trim();
       updateData.deliveryEstimatedTime = String(deliveryEstimatedTime || '').trim();
+    }
+    if (status === 'cancelled' && cancelReason) {
+      updateData.cancelReason = String(cancelReason).trim();
+    }
+    
+    // Track who updated the status
+    if (req.user) {
+      updateData.statusUpdatedBy = req.user.name || req.user.email || 'Admin';
     }
 
     const order = await CheckoutOrder.findByIdAndUpdate(
