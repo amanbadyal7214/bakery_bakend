@@ -44,6 +44,7 @@ const uploadLocalFileToCloudinary = async (localPath) => {
 
 const Product = require('../Models/Product');
 const IngredientDetail = require('../Models/IngredientDetail');
+const StockAdjustment = require('../Models/StockAdjustment');
 
 // Best-effort: extract Cloudinary public_id from a Cloudinary URL
 const extractCloudinaryPublicIdFromUrl = (url) => {
@@ -542,6 +543,32 @@ exports.updateProduct = async (req, res, next) => {
 
     // Run validators on update to catch bad data early
     const updated = await Product.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true, context: 'query' });
+
+    // --- Stock Adjustment Auditing ---
+    if (payload.lastStockAdjustmentReason) {
+      const reason = payload.lastStockAdjustmentReason;
+      const adminName = req.user ? (req.user.name || req.user.email) : 'Admin';
+
+      // 1. Check Variant Stock Differences
+      if (payload.variants && Array.isArray(payload.variants)) {
+        for (const nextV of payload.variants) {
+          const oldV = (existing.variants || []).find(o => o.weight === nextV.weight);
+          if (oldV && nextV.stock !== undefined && nextV.stock !== oldV.stock) {
+            const diff = nextV.stock - oldV.stock;
+            await StockAdjustment.create({
+              productId: existing._id,
+              productName: existing.name,
+              variantWeight: nextV.weight,
+              oldStock: oldV.stock,
+              newStock: nextV.stock,
+              difference: diff,
+              reason: reason,
+              adjustedBy: adminName
+            });
+          }
+        }
+      }
+    }
 
     // Cleanup old primary image if replaced
     if (newImgPath && existing.img && typeof existing.img === 'string') {

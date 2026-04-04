@@ -32,6 +32,7 @@ const ProductSchema = new mongoose.Schema({
   ingredients: { type: [String], default: [] },
   tasteDescription: { type: String },
   totalNutrition: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
+  lastStockAdjustmentReason: { type: String },
 });
 
 module.exports = mongoose.model('Product', ProductSchema);
