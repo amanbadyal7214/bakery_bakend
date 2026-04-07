@@ -10,8 +10,8 @@ const sendEmail = async (options) => {
     // Force IPv4 to avoid the ENETUNREACH error from earlier
     family: 4,
     auth: {
-      user: process.env.EMAIL_USERNAME,
-      pass: process.env.EMAIL_PASSWORD
+      user: "amanbadyal94@gmail.com",
+      pass:"aiczqzxnxksjgbth"
     },
     // Increase timeouts slightly for cloud environments
     connectionTimeout: 15000,
