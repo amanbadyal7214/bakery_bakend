@@ -26,8 +26,8 @@ const sendEmail = async (arg1, arg2, arg3, arg4) => {
     port: 587,
     secure: false, // true for 465, false for other ports (will use STARTTLS)
     auth: {
-      user: process.env.EMAIL_USERNAME,
-      pass: process.env.EMAIL_PASSWORD
+      user: process.env.EMAIL_USERNAME || "pisoftgit@gmail.com",
+      pass: process.env.EMAIL_PASSWORD || "gbtiwpfucairwlpa"
     },
     tls: {
       rejectUnauthorized: false // This bypasses the self-signed certificate error
