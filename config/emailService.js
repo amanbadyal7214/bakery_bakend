@@ -1,43 +1,37 @@
 const nodemailer = require('nodemailer');
 
 const sendEmail = async (options) => {
+  // 1) Create a transporter
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    // Switch to 587 - most cloud providers allow this port
     port: 465,
-    // secure MUST be false for port 587
-    secure: true, 
-    family: 4, // Force IPv4
+    secure: true, // Use SSL/TLS
+
     auth: {
       user: process.env.EMAIL_USERNAME,
       pass: process.env.EMAIL_PASSWORD
-    },
-    // Increase timeouts slightly for cloud environments
-    connectionTimeout: 30000, 
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
-    // Explicitly tell it to use STARTTLS
-    tls: {
-      rejectUnauthorized: true // Keep this true for security
     }
   });
 
+  // 2) Define the email options
   const mailOptions = {
-    from: '"Mehakara" <noreply@mehakara.com>',
+    from: 'Mehakara <noreply@mehakara.com>',
     to: options.email,
     subject: options.subject,
     text: options.message,
     html: options.html
   };
 
+  // 3) Actually send the email
+  console.log(`Attempting to send email to ${options.email} with subject: ${options.subject}`);
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log(`Email delivered: ${info.messageId}`);
-    return info;
+    console.log(`Email sent successfully: ${info.messageId}`);
   } catch (error) {
-    console.error('Email Delivery Failed:', error.message);
-    throw error;
+    console.error('Nodemailer error details:', error);
+    throw error; // Rethrow to let the fire-and-forget catch it too
   }
 };
+
 
 module.exports = sendEmail;
