@@ -6,25 +6,22 @@ const sendEmail = async (options) => {
     // Switch to 587 - most cloud providers allow this port
     port: 587,
     // secure MUST be false for port 587
-    secure: false, 
+    secure: false,
     // Force IPv4 to avoid the ENETUNREACH error from earlier
-    family: 4, 
+    family: 4,
     auth: {
       user: process.env.EMAIL_USERNAME,
       pass: process.env.EMAIL_PASSWORD
     },
     // Increase timeouts slightly for cloud environments
-    connectionTimeout: 15000, 
-    greetingTimeout: 15000, 
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
     socketTimeout: 15000,
-    // Explicitly tell it to use STARTTLS
-    tls: {
-      rejectUnauthorized: true // Keep this true for security
-    }
+
   });
 
   const mailOptions = {
-    from: '"Mehakara" <noreply@mehakara.com>',
+    from: '"Hangry?Sweet." <noreply@mehakara.com>',
     to: options.email,
     subject: options.subject,
     text: options.message,
