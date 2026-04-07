@@ -1,4 +1,8 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns');
+
+// Force DNS resolution to use IPv4 first to prevent ENETUNREACH errors on Render/IPv6
+dns.setDefaultResultOrder('ipv4first');
 
 function buildOptions(arg1, arg2, arg3, arg4) {
   if (typeof arg1 === 'object' && arg1 !== null) {
@@ -22,9 +26,10 @@ const sendEmail = async (arg1, arg2, arg3, arg4) => {
 
   // 1) Create a transporter
   const transporter = nodemailer.createTransport({
+    service: 'gmail',
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // true for 465, false for other ports (will use STARTTLS)
+    port: 465,
+    secure: true, // use SSL
     auth: {
       user: process.env.EMAIL_USERNAME || "pisoftgit@gmail.com",
       pass: process.env.EMAIL_PASSWORD || "gbtiwpfucairwlpa"
