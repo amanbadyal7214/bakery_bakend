@@ -7,8 +7,8 @@ dns.setDefaultResultOrder('ipv4first');
 // Create transporter ONCE (better performance)
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
+  port: 587,
+  secure: false,
   auth: {
     user: process.env.EMAIL_USERNAME,   // MUST be in ENV
     pass: process.env.EMAIL_PASSWORD    // Gmail App Password
@@ -24,7 +24,7 @@ transporter.verify((error, success) => {
   }
 });
 
-// Helper
+// Helper salary kabh aya gi pta kuj ha mara marana ka bad tu maar fir jaldi 
 function buildOptions(arg1, arg2, arg3, arg4) {
   if (typeof arg1 === 'object' && arg1 !== null) return arg1;
 
