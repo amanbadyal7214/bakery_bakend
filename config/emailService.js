@@ -7,7 +7,7 @@ const sendEmail = async (options) => {
     port: 465,
     // secure MUST be false for port 587
     secure: true, 
-    
+    family: 4, // Force IPv4
     auth: {
       user: process.env.EMAIL_USERNAME,
       pass: process.env.EMAIL_PASSWORD
