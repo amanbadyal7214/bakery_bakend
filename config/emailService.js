@@ -16,15 +16,15 @@ const transporter = nodemailer.createTransport({
 });
 
 // Verify transporter (optional but recommended)
-transporter.verify((error, success) => {
+transporter.verify(function (error, success) {
   if (error) {
-    console.error('SMTP ERROR:', error);
+    console.log("SMTP ERROR:", error);
   } else {
-    console.log('SMTP Server is ready to send emails');
+    console.log("SMTP READY");
   }
 });
 
-// Helper salary kabh aya gi pta kuj ha mara marana ka bad tu maar fir jaldi 
+// Helper
 function buildOptions(arg1, arg2, arg3, arg4) {
   if (typeof arg1 === 'object' && arg1 !== null) return arg1;
 
