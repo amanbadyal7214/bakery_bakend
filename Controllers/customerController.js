@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const Customer = require('../Models/Customer');
-const { sendEmail } = require('../config/emailService');
+const sendEmail = require('../config/emailService');
 
 const otpStore = new Map(); // Simple in-memory cache for OTPs
 
@@ -62,11 +62,11 @@ exports.sendOtp = async (req, res) => {
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 mins
     otpStore.set(normalizedEmail, { otp, expiresAt });
 
-    await sendEmail(
-      normalizedEmail,
-      'Your Registration OTP',
-      `Your OTP for registration is: ${otp}. It expires in 5 minutes.`
-    );
+    await sendEmail({
+      email: normalizedEmail,
+      subject: 'Your Registration OTP',
+      message: `Your OTP for registration is: ${otp}. It expires in 5 minutes.`
+    });
 
     res.json({ message: 'OTP sent successfully' });
   } catch (error) {
@@ -228,11 +228,11 @@ exports.sendResetOtp = async (req, res) => {
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes for reset
     otpStore.set(`reset:${normalizedEmail}`, { otp, expiresAt });
 
-    await sendEmail(
-      normalizedEmail,
-      'Your Password Reset OTP',
-      `You requested a password reset. Your OTP is: ${otp}. It expires in 10 minutes.`
-    );
+    await sendEmail({
+      email: normalizedEmail,
+      subject: 'Your Password Reset OTP',
+      message: `You requested a password reset. Your OTP is: ${otp}. It expires in 10 minutes.`
+    });
 
     res.json({ message: 'Password reset OTP sent successfully' });
   } catch (error) {

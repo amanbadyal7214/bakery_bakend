@@ -2,7 +2,7 @@ const Order = require('../Models/Order');
 const path = require('path');
 const fs = require('fs');
 const sharp = require('sharp');
-const { sendEmail } = require('../config/emailService');
+const sendEmail = require('../config/emailService');
 const Customer = require('../Models/Customer');
 
 exports.createOrder = async (req, res, next) => {

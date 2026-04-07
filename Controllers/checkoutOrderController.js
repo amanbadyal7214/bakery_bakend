@@ -1,6 +1,6 @@
 const Cart = require('../Models/Cart');
 const CheckoutOrder = require('../Models/CheckoutOrder');
-const { sendEmail } = require('../config/emailService');
+const sendEmail = require('../config/emailService');
 const Customer = require('../Models/Customer');
 const mongoose = require('mongoose');
 const Product = require('../Models/Product');
