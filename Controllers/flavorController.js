@@ -2,8 +2,8 @@ const Flavor = require('../Models/Flavor');
 
 exports.createFlavor = async (req, res, next) => {
   try {
-    const { name, description, categoryId } = req.body;
-    const flavor = new Flavor({ name, description, category: categoryId || null });
+    const { name, description, category, categoryId } = req.body;
+    const flavor = new Flavor({ name, description, category: category || categoryId || null });
     await flavor.save();
     // populate category for response
     await flavor.populate('category');
@@ -42,10 +42,10 @@ exports.getFlavor = async (req, res, next) => {
 
 exports.updateFlavor = async (req, res, next) => {
   try {
-    const { name, description, categoryId } = req.body;
+    const { name, description, category, categoryId } = req.body;
     const flavor = await Flavor.findByIdAndUpdate(
       req.params.id,
-      { name, description, category: categoryId || null },
+      { name, description, category: category || categoryId || null },
       { new: true, runValidators: true }
     ).populate('category');
     if (!flavor) {
