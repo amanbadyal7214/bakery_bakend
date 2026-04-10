@@ -2,8 +2,8 @@ const Shape = require('../Models/Shape');
 
 exports.createShape = async (req, res, next) => {
   try {
-    const { name, shapeType, description } = req.body;
-    const shape = new Shape({ name, shapeType, description });
+    const { name, shapeType, description, category } = req.body;
+    const shape = new Shape({ name, shapeType, description, category });
     await shape.save();
     res.status(201).json(shape);
   } catch (err) {
@@ -17,7 +17,7 @@ exports.createShape = async (req, res, next) => {
 
 exports.getShapes = async (req, res, next) => {
   try {
-    const shapes = await Shape.find().sort({ createdAt: -1 });
+    const shapes = await Shape.find().populate('category').sort({ createdAt: -1 });
     res.json(shapes);
   } catch (err) {
     next(err);
@@ -26,7 +26,7 @@ exports.getShapes = async (req, res, next) => {
 
 exports.getShape = async (req, res, next) => {
   try {
-    const shape = await Shape.findById(req.params.id);
+    const shape = await Shape.findById(req.params.id).populate('category');
     if (!shape) {
       const err = new Error('Shape not found');
       err.status = 404;
@@ -40,10 +40,10 @@ exports.getShape = async (req, res, next) => {
 
 exports.updateShape = async (req, res, next) => {
   try {
-    const { name, shapeType, description } = req.body;
+    const { name, shapeType, description, category } = req.body;
     const shape = await Shape.findByIdAndUpdate(
       req.params.id,
-      { name, shapeType, description },
+      { name, shapeType, description, category },
       { new: true, runValidators: true }
     );
     if (!shape) {

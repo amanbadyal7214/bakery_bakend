@@ -2,12 +2,17 @@ const Theme = require('../Models/Theme');
 
 exports.createTheme = async (req, res, next) => {
   try {
-    const { name, description, subthemes } = req.body;
+    const { name, description, subthemes, category } = req.body;
     const subs = Array.isArray(subthemes)
       ? subthemes.map(s => String(s || '').trim()).filter(Boolean)
       : [];
 
-    const theme = new Theme({ name, description, ...(subs.length ? { subthemes: subs } : {}) });
+    const theme = new Theme({ 
+      name, 
+      description, 
+      category,
+      ...(subs.length ? { subthemes: subs } : {}) 
+    });
     await theme.save();
     res.status(201).json(theme);
   } catch (err) {
@@ -21,7 +26,7 @@ exports.createTheme = async (req, res, next) => {
 
 exports.getThemes = async (req, res, next) => {
   try {
-    const themes = await Theme.find().sort({ createdAt: -1 });
+    const themes = await Theme.find().populate('category').sort({ createdAt: -1 });
     res.json(themes);
   } catch (err) {
     next(err);
@@ -30,7 +35,7 @@ exports.getThemes = async (req, res, next) => {
 
 exports.getTheme = async (req, res, next) => {
   try {
-    const theme = await Theme.findById(req.params.id);
+    const theme = await Theme.findById(req.params.id).populate('category');
     if (!theme) {
       const err = new Error('Theme not found');
       err.status = 404;
@@ -44,8 +49,8 @@ exports.getTheme = async (req, res, next) => {
 
 exports.updateTheme = async (req, res, next) => {
   try {
-    const { name, description, subthemes } = req.body;
-    const update = { name, description };
+    const { name, description, subthemes, category } = req.body;
+    const update = { name, description, category };
     if (Array.isArray(subthemes)) {
       update.subthemes = subthemes.map(s => String(s || '').trim()).filter(Boolean);
     }
