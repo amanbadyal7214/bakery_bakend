@@ -7,7 +7,7 @@ const { saveBase64Image, deleteCloudinaryImage } = require('../utils/cloudinary'
 exports.createProduct = async (req, res, next) => {
   try {
     const data = req.body;
-    
+
     // Primary image handle
     if (data.img && typeof data.img === 'string' && data.img.startsWith('data:')) {
       const saved = await saveBase64Image(data.img, 'products');
@@ -32,7 +32,7 @@ exports.createProduct = async (req, res, next) => {
 
     const product = new Product(data);
     await product.save();
-    
+
     // Populate before returning
     const populated = await Product.findById(product._id)
       .populate('flavor')
@@ -62,7 +62,7 @@ exports.updateProduct = async (req, res, next) => {
     if (data.img && typeof data.img === 'string' && data.img.startsWith('data:')) {
       // Delete old if exists
       if (existing.imgPublicId) await deleteCloudinaryImage(existing.imgPublicId);
-      
+
       const saved = await saveBase64Image(data.img, 'products');
       if (saved) {
         data.img = saved.url;
@@ -199,7 +199,7 @@ exports.getProduct = async (req, res, next) => {
       .populate('weight')
       .populate('shape')
       .populate('theme')
-      .populate('ingredients')
+      .populate('ingredients.ingredient')
       .populate('totalNutrition')
       .populate('variants.weight');
 
