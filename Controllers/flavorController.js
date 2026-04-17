@@ -3,10 +3,10 @@ const Flavor = require('../Models/Flavor');
 exports.createFlavor = async (req, res, next) => {
   try {
     const { name, description, category, categoryId } = req.body;
-    const flavor = new Flavor({ name, description, category: category || categoryId || null });
+    const flavor = new Flavor({ name, description, categories: req.body.categories || (req.body.category ? [req.body.category] : []) });
     await flavor.save();
     // populate category for response
-    await flavor.populate('category');
+    await flavor.populate('categories');
     res.status(201).json(flavor);
   } catch (err) {
     if (err.code === 11000) {
@@ -19,7 +19,7 @@ exports.createFlavor = async (req, res, next) => {
 
 exports.getFlavors = async (req, res, next) => {
   try {
-    const flavors = await Flavor.find().populate('category').sort({ createdAt: -1 });
+    const flavors = await Flavor.find().populate('categories').sort({ createdAt: -1 });
     res.json(flavors);
   } catch (err) {
     next(err);
@@ -28,7 +28,7 @@ exports.getFlavors = async (req, res, next) => {
 
 exports.getFlavor = async (req, res, next) => {
   try {
-    const flavor = await Flavor.findById(req.params.id).populate('category');
+    const flavor = await Flavor.findById(req.params.id).populate('categories');
     if (!flavor) {
       const err = new Error('Flavor not found');
       err.status = 404;
@@ -45,9 +45,9 @@ exports.updateFlavor = async (req, res, next) => {
     const { name, description, category, categoryId } = req.body;
     const flavor = await Flavor.findByIdAndUpdate(
       req.params.id,
-      { name, description, category: category || categoryId || null },
+      { name, description, categories: req.body.categories || (req.body.category ? [req.body.category] : []) },
       { new: true, runValidators: true }
-    ).populate('category');
+    ).populate('categories');
     if (!flavor) {
       const err = new Error('Flavor not found');
       err.status = 404;

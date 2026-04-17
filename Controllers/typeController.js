@@ -2,8 +2,8 @@ const Type = require('../Models/Type');
 
 exports.createType = async (req, res, next) => {
   try {
-    const { name, description, category } = req.body;
-    const type = new Type({ name, description, category: category || null });
+    const { name, description, categories } = req.body;
+    const type = new Type({ name, description, categories: categories || [] });
     await type.save();
     res.status(201).json(type);
   } catch (err) {
@@ -18,7 +18,7 @@ exports.createType = async (req, res, next) => {
 exports.getTypes = async (req, res, next) => {
   try {
     const types = await Type.find()
-      .populate('category', 'name')
+      .populate('categories', 'name')
       .sort({ createdAt: -1 });
     res.json(types);
   } catch (err) {
@@ -28,7 +28,7 @@ exports.getTypes = async (req, res, next) => {
 
 exports.getType = async (req, res, next) => {
   try {
-    const type = await Type.findById(req.params.id).populate('category', 'name');
+    const type = await Type.findById(req.params.id).populate('categories', 'name');
     if (!type) {
       const err = new Error('Type not found');
       err.status = 404;
@@ -42,12 +42,12 @@ exports.getType = async (req, res, next) => {
 
 exports.updateType = async (req, res, next) => {
   try {
-    const { name, description, category } = req.body;
+    const { name, description, categories } = req.body;
     const type = await Type.findByIdAndUpdate(
       req.params.id,
-      { name, description, category: category || null },
+      { name, description, categories: categories || [] },
       { new: true, runValidators: true }
-    ).populate('category', 'name');
+    ).populate('categories', 'name');
     if (!type) {
       const err = new Error('Type not found');
       err.status = 404;

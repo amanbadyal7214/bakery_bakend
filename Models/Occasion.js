@@ -4,7 +4,7 @@ const Schema = mongoose.Schema;
 const OccasionSchema = new Schema({
   name: { type: String, required: true, unique: true, trim: true },
   description: { type: String, default: '' },
-  category: { type: Schema.Types.ObjectId, ref: 'Category', default: null },
+  categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
   suboccasions: { type: [String], default: [] },
   createdAt: { type: Date, default: Date.now },
 });

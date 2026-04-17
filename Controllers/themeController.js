@@ -2,16 +2,17 @@ const Theme = require('../Models/Theme');
 
 exports.createTheme = async (req, res, next) => {
   try {
-    const { name, description, subthemes, category } = req.body;
-    const subs = Array.isArray(subthemes)
-      ? subthemes.map(s => String(s || '').trim()).filter(Boolean)
+    const { name, description, subthemes, subThemes, categories } = req.body;
+    const incomingSubs = subthemes || subThemes;
+    const subs = Array.isArray(incomingSubs)
+      ? incomingSubs.map(s => String(s || '').trim()).filter(Boolean)
       : [];
 
     const theme = new Theme({ 
       name, 
       description, 
-      category,
-      ...(subs.length ? { subthemes: subs } : {}) 
+      categories: categories || [],
+      subthemes: subs
     });
     await theme.save();
     res.status(201).json(theme);
@@ -26,7 +27,7 @@ exports.createTheme = async (req, res, next) => {
 
 exports.getThemes = async (req, res, next) => {
   try {
-    const themes = await Theme.find().populate('category').sort({ createdAt: -1 });
+    const themes = await Theme.find().populate('categories').sort({ createdAt: -1 });
     res.json(themes);
   } catch (err) {
     next(err);
@@ -35,7 +36,7 @@ exports.getThemes = async (req, res, next) => {
 
 exports.getTheme = async (req, res, next) => {
   try {
-    const theme = await Theme.findById(req.params.id).populate('category');
+    const theme = await Theme.findById(req.params.id).populate('categories');
     if (!theme) {
       const err = new Error('Theme not found');
       err.status = 404;
@@ -49,10 +50,11 @@ exports.getTheme = async (req, res, next) => {
 
 exports.updateTheme = async (req, res, next) => {
   try {
-    const { name, description, subthemes, category } = req.body;
-    const update = { name, description, category };
-    if (Array.isArray(subthemes)) {
-      update.subthemes = subthemes.map(s => String(s || '').trim()).filter(Boolean);
+    const { name, description, subthemes, subThemes, categories } = req.body;
+    const update = { name, description, categories: categories || [] };
+    const incomingSubs = subthemes || subThemes;
+    if (Array.isArray(incomingSubs)) {
+      update.subthemes = incomingSubs.map(s => String(s || '').trim()).filter(Boolean);
     }
 
     const theme = await Theme.findByIdAndUpdate(

@@ -2,8 +2,8 @@ const Weight = require('../Models/Weight');
 
 exports.createWeight = async (req, res, next) => {
   try {
-    const { name, description, category } = req.body;
-    const weight = new Weight({ name, description, category });
+    const { name, description, categories } = req.body;
+    const weight = new Weight({ name, description, categories });
     await weight.save();
     res.status(201).json(weight);
   } catch (err) {
@@ -17,7 +17,7 @@ exports.createWeight = async (req, res, next) => {
 
 exports.getWeights = async (req, res, next) => {
   try {
-    const weights = await Weight.find().populate('category').sort({ createdAt: -1 });
+    const weights = await Weight.find().populate('categories').sort({ createdAt: -1 });
     res.json(weights);
   } catch (err) {
     next(err);
@@ -26,7 +26,7 @@ exports.getWeights = async (req, res, next) => {
 
 exports.getWeight = async (req, res, next) => {
   try {
-    const weight = await Weight.findById(req.params.id).populate('category');
+    const weight = await Weight.findById(req.params.id).populate('categories');
     if (!weight) {
       const err = new Error('Weight not found');
       err.status = 404;
@@ -40,10 +40,10 @@ exports.getWeight = async (req, res, next) => {
 
 exports.updateWeight = async (req, res, next) => {
   try {
-    const { name, description, category } = req.body;
+    const { name, description, categories } = req.body;
     const weight = await Weight.findByIdAndUpdate(
       req.params.id,
-      { name, description, category },
+      { name, description, categories },
       { new: true, runValidators: true }
     );
     if (!weight) {

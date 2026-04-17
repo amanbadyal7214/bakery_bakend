@@ -2,16 +2,17 @@ const Occasion = require('../Models/Occasion');
 
 exports.createOccasion = async (req, res, next) => {
   try {
-    const { name, description, suboccasions, category } = req.body;
-    const subs = Array.isArray(suboccasions)
-      ? suboccasions.map(s => String(s || '').trim()).filter(Boolean)
+    const { name, description, suboccasions, subOccasions, categories } = req.body;
+    const incomingSubs = suboccasions || subOccasions;
+    const subs = Array.isArray(incomingSubs)
+      ? incomingSubs.map(s => String(s || '').trim()).filter(Boolean)
       : [];
 
     const occasion = new Occasion({ 
       name, 
       description, 
-      category,
-      ...(subs.length ? { suboccasions: subs } : {}) 
+      categories: categories || [],
+      suboccasions: subs
     });
     await occasion.save();
     res.status(201).json(occasion);
@@ -26,7 +27,7 @@ exports.createOccasion = async (req, res, next) => {
 
 exports.getOccasions = async (req, res, next) => {
   try {
-    const occasions = await Occasion.find().populate('category').sort({ createdAt: -1 });
+    const occasions = await Occasion.find().populate('categories').sort({ createdAt: -1 });
     res.json(occasions);
   } catch (err) {
     next(err);
@@ -35,7 +36,7 @@ exports.getOccasions = async (req, res, next) => {
 
 exports.getOccasion = async (req, res, next) => {
   try {
-    const occasion = await Occasion.findById(req.params.id).populate('category');
+    const occasion = await Occasion.findById(req.params.id).populate('categories');
     if (!occasion) {
       const err = new Error('Occasion not found');
       err.status = 404;
@@ -49,10 +50,11 @@ exports.getOccasion = async (req, res, next) => {
 
 exports.updateOccasion = async (req, res, next) => {
   try {
-    const { name, description, suboccasions, category } = req.body;
-    const update = { name, description, category };
-    if (Array.isArray(suboccasions)) {
-      update.suboccasions = suboccasions.map(s => String(s || '').trim()).filter(Boolean);
+    const { name, description, suboccasions, subOccasions, categories } = req.body;
+    const update = { name, description, categories: categories || [] };
+    const incomingSubs = suboccasions || subOccasions;
+    if (Array.isArray(incomingSubs)) {
+      update.suboccasions = incomingSubs.map(s => String(s || '').trim()).filter(Boolean);
     }
 
     const occasion = await Occasion.findByIdAndUpdate(
