@@ -13,25 +13,28 @@ const ProductSchema = new mongoose.Schema({
   }], // Array for multiple images (no base64 stored)
   rating: { type: Number, default: 4.8 },
   badge: { type: String },
-  flavor: { type: [String], default: [] },
-  type: { type: [String], default: [] },
-  occasion: { type: [String], default: [] },
-  weight: { type: [String], default: [] },
+  flavor: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Flavor' }],
+  type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Type' }],
+  occasion: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Occasion' }],
+  weight: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Weight' }],
   pricesByWeight: { type: [Number], default: [] },
   variants: [{
-    weight: String,
+    weight: { type: mongoose.Schema.Types.ObjectId, ref: 'Weight' },
     price: Number,
     stock: { type: Number, default: 0 }
   }],
   delivery: { type: [String], default: [] },
   dietary: { type: [String], default: [] },
-  shape: { type: [String], default: [] },
-  theme: { type: [String], default: [] },
+  shape: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Shape' }],
+  theme: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Theme' }],
   description: { type: String },
   createdAt: { type: Date, default: Date.now },
-  ingredients: { type: [String], default: [] },
+  ingredients: [{
+    ingredient: { type: mongoose.Schema.Types.ObjectId, ref: 'IngredientDetail' },
+    qty: { type: Number, default: 0 }
+  }],
   tasteDescription: { type: String },
-  totalNutrition: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
+  totalNutrition: { type: mongoose.Schema.Types.ObjectId, ref: 'IngredientDetail' },
   lastStockAdjustmentReason: { type: String },
 });
 

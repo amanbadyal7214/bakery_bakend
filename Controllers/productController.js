@@ -2,26 +2,50 @@ const Product = require('../Models/Product');
 const IngredientDetail = require('../Models/IngredientDetail');
 const StockAdjustment = require('../Models/StockAdjustment');
 const Event = require('../Models/Event');
-
-// Best-effort: extract Cloudinary public_id from a Cloudinary URL
-const extractCloudinaryPublicIdFromUrl = (url) => {
-  if (!url) return null;
-  const parts = url.split('/');
-  const uploadIndex = parts.indexOf('upload');
-  if (uploadIndex === -1) return null;
-  const publicIdWithExt = parts.slice(uploadIndex + 2).join('/');
-  return publicIdWithExt.split('.')[0];
-};
+const { saveBase64Image, deleteCloudinaryImage } = require('../utils/cloudinary');
 
 exports.createProduct = async (req, res, next) => {
   try {
     const data = req.body;
-    if (data.img && !data.imgPublicId) {
-      data.imgPublicId = extractCloudinaryPublicIdFromUrl(data.img);
+    
+    // Primary image handle
+    if (data.img && typeof data.img === 'string' && data.img.startsWith('data:')) {
+      const saved = await saveBase64Image(data.img, 'products');
+      if (saved) {
+        data.img = saved.url;
+        data.imgPublicId = saved.public_id;
+      }
     }
+
+    // Gallery images handle
+    if (Array.isArray(data.images)) {
+      data.images = await Promise.all(
+        data.images.map(async (img) => {
+          if (img.base64 && img.base64.startsWith('data:')) {
+            const saved = await saveBase64Image(img.base64, 'products/gallery');
+            return saved ? { url: saved.url, public_id: saved.public_id } : { url: img.url };
+          }
+          return img;
+        })
+      );
+    }
+
     const product = new Product(data);
     await product.save();
-    res.status(201).json({ data: product });
+    
+    // Populate before returning
+    const populated = await Product.findById(product._id)
+      .populate('flavor')
+      .populate('type')
+      .populate('occasion')
+      .populate('weight')
+      .populate('shape')
+      .populate('theme')
+      .populate('ingredients.ingredient')
+      .populate('totalNutrition')
+      .populate('variants.weight');
+
+    res.status(201).json({ data: populated });
   } catch (err) {
     console.error('productController.createProduct error:', err);
     res.status(400).json({ error: err.message });
@@ -31,11 +55,45 @@ exports.createProduct = async (req, res, next) => {
 exports.updateProduct = async (req, res, next) => {
   try {
     const data = req.body;
-    if (data.img && !data.imgPublicId) {
-      data.imgPublicId = extractCloudinaryPublicIdFromUrl(data.img);
+    const existing = await Product.findById(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Product not found' });
+
+    // Primary image handle
+    if (data.img && typeof data.img === 'string' && data.img.startsWith('data:')) {
+      // Delete old if exists
+      if (existing.imgPublicId) await deleteCloudinaryImage(existing.imgPublicId);
+      
+      const saved = await saveBase64Image(data.img, 'products');
+      if (saved) {
+        data.img = saved.url;
+        data.imgPublicId = saved.public_id;
+      }
     }
-    const product = await Product.findByIdAndUpdate(req.params.id, data, { new: true });
-    if (!product) return res.status(404).json({ error: 'Product not found' });
+
+    // Gallery images handle
+    if (Array.isArray(data.images)) {
+      data.images = await Promise.all(
+        data.images.map(async (img) => {
+          if (img.base64 && img.base64.startsWith('data:')) {
+            const saved = await saveBase64Image(img.base64, 'products/gallery');
+            return saved ? { url: saved.url, public_id: saved.public_id } : { url: img.url };
+          }
+          return img;
+        })
+      );
+    }
+
+    const product = await Product.findByIdAndUpdate(req.params.id, data, { new: true })
+      .populate('flavor')
+      .populate('type')
+      .populate('occasion')
+      .populate('weight')
+      .populate('shape')
+      .populate('theme')
+      .populate('ingredients.ingredient')
+      .populate('totalNutrition')
+      .populate('variants.weight');
+
     res.json({ data: product });
   } catch (err) {
     console.error('productController.updateProduct error:', err);
@@ -63,7 +121,18 @@ exports.listProducts = async (req, res, next) => {
 
     const skip = (Number(page) - 1) * Number(limit);
     const total = await Product.countDocuments(filter);
-    let products = await Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit));
+    let productsQuery = Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit))
+      .populate('flavor')
+      .populate('type')
+      .populate('occasion')
+      .populate('weight')
+      .populate('shape')
+      .populate('theme')
+      .populate('ingredients.ingredient')
+      .populate('totalNutrition')
+      .populate('variants.weight');
+
+    let products = await productsQuery;
 
     // --- Dynamic Event Discount Logic ---
     const activeEvent = await Event.findOne({ isActive: true });
@@ -123,7 +192,17 @@ exports.listProducts = async (req, res, next) => {
 
 exports.getProduct = async (req, res, next) => {
   try {
-    let p = await Product.findById(req.params.id);
+    let p = await Product.findById(req.params.id)
+      .populate('flavor')
+      .populate('type')
+      .populate('occasion')
+      .populate('weight')
+      .populate('shape')
+      .populate('theme')
+      .populate('ingredients')
+      .populate('totalNutrition')
+      .populate('variants.weight');
+
     if (!p) return res.status(404).json({ error: 'Product not found' });
 
     // --- Dynamic Event Discount Logic ---
