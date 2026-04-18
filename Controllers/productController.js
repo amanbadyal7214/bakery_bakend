@@ -1,8 +1,61 @@
+const mongoose = require('mongoose');
 const Product = require('../Models/Product');
 const IngredientDetail = require('../Models/IngredientDetail');
 const StockAdjustment = require('../Models/StockAdjustment');
 const Event = require('../Models/Event');
 const { saveBase64Image, deleteCloudinaryImage } = require('../utils/cloudinary');
+
+const splitMixed = (arr) => {
+  const ids = [];
+  const labels = [];
+  if (Array.isArray(arr)) {
+    arr.forEach(item => {
+      const val = (item && (item._id || item.id)) || item;
+      if (val && typeof val === 'string' && mongoose.Types.ObjectId.isValid(val)) {
+        ids.push(val);
+      } else if (val) {
+        labels.push(String(val));
+      }
+    });
+  }
+  return { ids, labels };
+};
+
+const manualPopulate = async (products, field, modelName) => {
+  if (!products) return;
+  const list = Array.isArray(products) ? products : [products];
+  const allIds = new Set();
+  
+  list.forEach(p => {
+    const arr = p[field];
+    if (Array.isArray(arr)) {
+      arr.forEach(id => {
+        const idStr = (id && (id._id || id.id || id))?.toString();
+        if (idStr && mongoose.Types.ObjectId.isValid(idStr)) {
+          allIds.add(idStr);
+        }
+      });
+    }
+  });
+
+  if (allIds.size === 0) return;
+
+  try {
+    const docs = await mongoose.model(modelName).find({ _id: { $in: Array.from(allIds) } });
+    const map = new Map(docs.map(d => [d._id.toString(), d]));
+
+    list.forEach(p => {
+      if (Array.isArray(p[field])) {
+        p[field] = p[field].map(id => {
+          const idStr = (id && (id._id || id.id || id))?.toString();
+          return map.get(idStr) || id;
+        });
+      }
+    });
+  } catch (err) {
+    console.error(`Manual populate failed for ${field}:`, err);
+  }
+};
 
 exports.createProduct = async (req, res, next) => {
   try {
@@ -30,22 +83,35 @@ exports.createProduct = async (req, res, next) => {
       );
     }
 
+    // Split mixed fields
+    ['flavor', 'type', 'occasion', 'shape', 'theme'].forEach(field => {
+      if (data[field]) {
+        const { ids, labels } = splitMixed(data[field]);
+        data[field] = ids;
+        data[`${field}Labels`] = labels;
+      }
+    });
+
     const product = new Product(data);
     await product.save();
 
     // Populate before returning
     const populated = await Product.findById(product._id)
-      .populate('flavor')
-      .populate('type')
-      .populate('occasion')
       .populate('weight')
-      .populate('shape')
-      .populate('theme')
       .populate('ingredients.ingredient')
       .populate('totalNutrition')
       .populate('variants.weight');
 
-    res.status(201).json({ data: populated });
+    const productObj = populated.toObject();
+    await Promise.all([
+      manualPopulate(productObj, 'flavor', 'Flavor'),
+      manualPopulate(productObj, 'type', 'Type'),
+      manualPopulate(productObj, 'occasion', 'Occasion'),
+      manualPopulate(productObj, 'shape', 'Shape'),
+      manualPopulate(productObj, 'theme', 'Theme'),
+    ]);
+
+    res.status(201).json({ data: productObj });
   } catch (err) {
     console.error('productController.createProduct error:', err);
     res.status(400).json({ error: err.message });
@@ -83,18 +149,31 @@ exports.updateProduct = async (req, res, next) => {
       );
     }
 
+    // Split mixed fields
+    ['flavor', 'type', 'occasion', 'shape', 'theme'].forEach(field => {
+      if (data[field]) {
+        const { ids, labels } = splitMixed(data[field]);
+        data[field] = ids;
+        data[`${field}Labels`] = labels;
+      }
+    });
+
     const product = await Product.findByIdAndUpdate(req.params.id, data, { new: true })
-      .populate('flavor')
-      .populate('type')
-      .populate('occasion')
       .populate('weight')
-      .populate('shape')
-      .populate('theme')
       .populate('ingredients.ingredient')
       .populate('totalNutrition')
       .populate('variants.weight');
 
-    res.json({ data: product });
+    const productObj = product.toObject();
+    await Promise.all([
+      manualPopulate(productObj, 'flavor', 'Flavor'),
+      manualPopulate(productObj, 'type', 'Type'),
+      manualPopulate(productObj, 'occasion', 'Occasion'),
+      manualPopulate(productObj, 'shape', 'Shape'),
+      manualPopulate(productObj, 'theme', 'Theme'),
+    ]);
+
+    res.json({ data: productObj });
   } catch (err) {
     console.error('productController.updateProduct error:', err);
     res.status(400).json({ error: err.message });
@@ -122,17 +201,20 @@ exports.listProducts = async (req, res, next) => {
     const skip = (Number(page) - 1) * Number(limit);
     const total = await Product.countDocuments(filter);
     let productsQuery = Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(Number(limit))
-      .populate('flavor')
-      .populate('type')
-      .populate('occasion')
       .populate('weight')
-      .populate('shape')
-      .populate('theme')
       .populate('ingredients.ingredient')
       .populate('totalNutrition')
       .populate('variants.weight');
 
-    let products = await productsQuery;
+    let products = await productsQuery.lean();
+
+    await Promise.all([
+      manualPopulate(products, 'flavor', 'Flavor'),
+      manualPopulate(products, 'type', 'Type'),
+      manualPopulate(products, 'occasion', 'Occasion'),
+      manualPopulate(products, 'shape', 'Shape'),
+      manualPopulate(products, 'theme', 'Theme'),
+    ]);
 
     // --- Dynamic Event Discount Logic ---
     const activeEvent = await Event.findOne({ isActive: true });
@@ -151,7 +233,7 @@ exports.listProducts = async (req, res, next) => {
       products = products.map(p => {
         const offer = activeEvent.offers.find(o => o.productId && o.productId.toString() === p._id.toString());
         if (offer) {
-          const productObj = p.toObject();
+          const productObj = p;
           const eventPrice = parseFloat(offer.price.replace(/[^0-9.]/g, ''));
           // Use variant[0].mrp or p.price as base if needed
           const baseForRatio = productObj.variants?.[0]?.mrp || productObj.price || 1;
@@ -191,18 +273,22 @@ exports.listProducts = async (req, res, next) => {
 
 exports.getProduct = async (req, res, next) => {
   try {
-    let p = await Product.findById(req.params.id)
-      .populate('flavor')
-      .populate('type')
-      .populate('occasion')
+    let pDoc = await Product.findById(req.params.id)
       .populate('weight')
-      .populate('shape')
-      .populate('theme')
       .populate('ingredients.ingredient')
       .populate('totalNutrition')
       .populate('variants.weight');
 
-    if (!p) return res.status(404).json({ error: 'Product not found' });
+    if (!pDoc) return res.status(404).json({ error: 'Product not found' });
+
+    let p = pDoc.toObject();
+    await Promise.all([
+      manualPopulate(p, 'flavor', 'Flavor'),
+      manualPopulate(p, 'type', 'Type'),
+      manualPopulate(p, 'occasion', 'Occasion'),
+      manualPopulate(p, 'shape', 'Shape'),
+      manualPopulate(p, 'theme', 'Theme'),
+    ]);
 
     // --- Dynamic Event Discount Logic ---
     const activeEvent = await Event.findOne({ isActive: true });
@@ -219,7 +305,7 @@ exports.getProduct = async (req, res, next) => {
     if (activeEvent && isCurrentlyRunning && activeEvent.offers) {
       const offer = activeEvent.offers.find(o => o.productId && o.productId.toString() === p._id.toString());
       if (offer) {
-        const productObj = p.toObject();
+        const productObj = p;
         const eventPrice = parseFloat(offer.price.replace(/[^0-9.]/g, ''));
         const baseForRatio = productObj.variants?.[0]?.mrp || productObj.mrp || productObj.price || 1;
         const discountRatio = eventPrice / baseForRatio;

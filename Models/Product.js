@@ -14,8 +14,11 @@ const ProductSchema = new mongoose.Schema({
   rating: { type: Number, default: 4.8 },
   badge: { type: String },
   flavor: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Flavor' }],
+  flavorLabels: { type: [String], default: [] },
   type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Type' }],
+  typeLabels: { type: [String], default: [] },
   occasion: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Occasion' }],
+  occasionLabels: { type: [String], default: [] },
   weight: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Weight' }],
   pricesByWeight: { type: [Number], default: [] },
   variants: [{
@@ -27,7 +30,9 @@ const ProductSchema = new mongoose.Schema({
   delivery: { type: [String], default: [] },
   dietary: { type: [String], default: [] },
   shape: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Shape' }],
+  shapeLabels: { type: [String], default: [] },
   theme: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Theme' }],
+  themeLabels: { type: [String], default: [] },
   description: { type: String },
   createdAt: { type: Date, default: Date.now },
   ingredients: [{
