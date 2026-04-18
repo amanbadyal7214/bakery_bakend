@@ -20,7 +20,8 @@ const ProductSchema = new mongoose.Schema({
   pricesByWeight: { type: [Number], default: [] },
   variants: [{
     weight: { type: mongoose.Schema.Types.ObjectId, ref: 'Weight' },
-    price: Number,
+    mrp: { type: Number, default: 0 },
+    sellingPrice: { type: Number, default: 0 },
     stock: { type: Number, default: 0 }
   }],
   delivery: { type: [String], default: [] },

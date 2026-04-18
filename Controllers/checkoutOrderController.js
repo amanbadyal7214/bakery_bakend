@@ -293,14 +293,14 @@ exports.updateOrderStatus = async (req, res) => {
 
              let matchedVariant = null;
              if (prod.variants && prod.variants.length > 0 && it.name) {
-                 const match = String(it.name).match(/\(([^,]+),\s*([^)]+)\)$/);
-                 if (match) {
-                     const searchWeight = match[2].trim();
-                     matchedVariant = prod.variants.find(v => String(v.weight).toLowerCase() === searchWeight.toLowerCase());
-                 } else {
-                     matchedVariant = prod.variants.find(v => String(it.name).includes(v.weight));
-                 }
-             }
+                  const match = String(it.name).match(/\(([^,]+),\s*([^)]+)\)$/);
+                  if (match) {
+                      const searchWeight = match[2].trim();
+                      matchedVariant = prod.variants.find(v => String(v.weight).toLowerCase() === searchWeight.toLowerCase());
+                  } else {
+                      matchedVariant = prod.variants.find(v => String(it.name).includes(v.weight));
+                  }
+              }
 
              if (matchedVariant) {
                  matchedVariant.stock = Number(matchedVariant.stock) + it.quantity;

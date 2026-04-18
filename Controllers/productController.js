@@ -153,27 +153,26 @@ exports.listProducts = async (req, res, next) => {
         if (offer) {
           const productObj = p.toObject();
           const eventPrice = parseFloat(offer.price.replace(/[^0-9.]/g, ''));
-          const discountRatio = eventPrice / p.price;
+          // Use variant[0].mrp or p.price as base if needed
+          const baseForRatio = productObj.variants?.[0]?.mrp || productObj.price || 1;
+          const discountRatio = eventPrice / baseForRatio;
 
           productObj.eventDiscount = {
             active: true,
             salePrice: eventPrice,
-            originalPrice: p.price,
+            originalPrice: baseForRatio,
             badge: offer.badge,
             discount: offer.discount,
             ratio: discountRatio
           };
 
           productObj.price = eventPrice;
-
-          if (productObj.pricesByWeight && productObj.pricesByWeight.length > 0) {
-            productObj.pricesByWeight = productObj.pricesByWeight.map(pw => Number((pw * discountRatio).toFixed(2)));
-          }
+          productObj.sellingPrice = eventPrice;
 
           if (productObj.variants && productObj.variants.length > 0) {
             productObj.variants = productObj.variants.map(v => ({
               ...v,
-              price: Number((v.price * discountRatio).toFixed(2))
+              sellingPrice: Number((v.mrp * discountRatio).toFixed(2))
             }));
           }
 
@@ -222,27 +221,25 @@ exports.getProduct = async (req, res, next) => {
       if (offer) {
         const productObj = p.toObject();
         const eventPrice = parseFloat(offer.price.replace(/[^0-9.]/g, ''));
-        const discountRatio = eventPrice / p.price;
+        const baseForRatio = productObj.variants?.[0]?.mrp || productObj.mrp || productObj.price || 1;
+        const discountRatio = eventPrice / baseForRatio;
 
         productObj.eventDiscount = {
           active: true,
           salePrice: eventPrice,
-          originalPrice: p.price,
+          originalPrice: baseForRatio,
           badge: offer.badge,
           discount: offer.discount,
           ratio: discountRatio
         };
 
+        productObj.sellingPrice = eventPrice;
         productObj.price = eventPrice;
-
-        if (productObj.pricesByWeight && productObj.pricesByWeight.length > 0) {
-          productObj.pricesByWeight = productObj.pricesByWeight.map(pw => Number((pw * discountRatio).toFixed(2)));
-        }
 
         if (productObj.variants && productObj.variants.length > 0) {
           productObj.variants = productObj.variants.map(v => ({
             ...v,
-            price: Number((v.price * discountRatio).toFixed(2))
+            sellingPrice: Number((v.mrp * discountRatio).toFixed(2))
           }));
         }
 
