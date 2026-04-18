@@ -7,6 +7,7 @@ const CartItemSchema = new mongoose.Schema(
       ref: 'Product',
       required: true,
     },
+    variantId: { type: mongoose.Schema.Types.ObjectId },
     name: { type: String, required: true, trim: true },
     category: { type: String, default: 'Bakery', trim: true },
     image: { type: String, default: '/placeholder.svg' },

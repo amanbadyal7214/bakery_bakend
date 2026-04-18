@@ -24,7 +24,10 @@ const serializeCart = async (cartDoc) => {
     const prodId = item.productId;
     let product = null;
     try {
-      product = await Product.findById(prodId).select('price stock img images name category variants').lean();
+      product = await Product.findById(prodId)
+        .select('price stock img images name category variants')
+        .populate({ path: 'variants.weight' })
+        .lean();
     } catch (e) {
       product = null;
     }
@@ -34,9 +37,36 @@ const serializeCart = async (cartDoc) => {
     const image = item.image || (product ? (product.img || (Array.isArray(product.images) && product.images[0] && product.images[0].url) || '/placeholder.svg') : '/placeholder.svg');
     const stock = typeof (product && product.stock) === 'number' ? product.stock : 0;
 
+    let displayName = item.name || (product ? product.name : '');
+    
+    // Repair name if it contains legacy residues or empty brackets
+    if (displayName.includes('[object Object]') || displayName.endsWith('()')) {
+        const baseName = product ? product.name : displayName.split(' (')[0];
+        let flavorPart = '';
+        
+        // Try to extract flavor from existing name if present
+        const flavorMatch = displayName.match(/\(([^,)]+)/);
+        if (flavorMatch && flavorMatch[1] && !flavorMatch[1].includes('[object Object]')) {
+            flavorPart = flavorMatch[1].trim();
+        }
+
+        // Try to extract weight from populated variant
+        let weightPart = '';
+        if (item.variantId && product && product.variants) {
+            const variant = product.variants.find(v => String(v._id) === String(item.variantId));
+            if (variant && variant.weight) {
+                weightPart = variant.weight.name || variant.weight.label || '';
+            }
+        }
+
+        const parts = [flavorPart, weightPart].filter(p => p && p.trim().length > 0 && p !== 'Original');
+        displayName = parts.length > 0 ? `${baseName} (${parts.join(', ')})` : baseName;
+    }
+
     items.push({
       id: String(prodId),
-      name: item.name || (product ? product.name : ''),
+      variantId: item.variantId,
+      name: displayName,
       category: item.category || (product ? product.category || 'Bakery' : 'Bakery'),
       image,
       price,
@@ -87,17 +117,23 @@ exports.addItem = async (req, res) => {
       return res.status(403).json({ error: 'Only customers can modify cart' });
     }
 
-    const { productId, quantity = 1, name, stock: reqStock, price: reqPrice } = req.body;
+    const { productId, variantId, quantity = 1, name, stock: reqStock, price: reqPrice } = req.body;
     if (!productId || !mongoose.Types.ObjectId.isValid(String(productId))) {
       return res.status(400).json({ error: 'Valid productId is required' });
     }
 
     const qtyToAdd = Math.max(1, Math.floor(Number(quantity) || 1));
-    const product = await Product.findById(productId).select('price stock name img images category');
+    const product = await Product.findById(productId).select('price stock name img images category variants');
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
-    // Prefer specific variant stock if sent from the frontend, else use global aggregate stock
-    const limitStock = typeof reqStock === 'number' ? reqStock : product.stock;
+    // Handle variant-specific stock if variantId is provided
+    let limitStock = product.stock;
+    if (variantId && product.variants) {
+      const variant = product.variants.id(variantId);
+      if (variant) limitStock = variant.stock;
+    } else if (typeof reqStock === 'number') {
+      limitStock = reqStock;
+    }
 
     // Disallow adding when out of stock
     if (typeof limitStock === 'number' && limitStock <= 0) {
@@ -106,7 +142,9 @@ exports.addItem = async (req, res) => {
 
     const cart = await getOrCreateCart(req.user.id);
     const existingIndex = cart.items.findIndex(
-      (item) => String(item.productId) === String(product._id) && (!name || item.name === name)
+      (item) => String(item.productId) === String(product._id) && 
+                (!variantId || String(item.variantId) === String(variantId)) &&
+                (!name || item.name === name)
     );
 
     if (existingIndex >= 0) {
@@ -129,6 +167,7 @@ exports.addItem = async (req, res) => {
       }
       cart.items.push({
         productId: product._id,
+        variantId: variantId || null,
         name: name || product.name,
         category: product.category || 'Bakery',
         image: resolveImage(product),
@@ -176,15 +215,18 @@ exports.setItemQuantity = async (req, res) => {
     if (!product) return res.status(404).json({ error: 'Product not found' });
 
     let limitStock = product.stock;
-    if (product.variants && product.variants.length > 0 && itemTargetName) {
-        // Evaluate dynamic limit
+    if (targetItem.variantId && product.variants) {
+        const variant = product.variants.id(targetItem.variantId);
+        if (variant) limitStock = variant.stock;
+    } else if (product.variants && product.variants.length > 0 && itemTargetName) {
+        // Fallback to regex if variantId is missing (for legacy items)
         const match = itemTargetName.match(/\(([^,]+),\s*([^)]+)\)$/);
         if (match) {
             const variantWeight = match[2].trim();
             const variant = product.variants.find(v => String(v.weight).toLowerCase() === variantWeight.toLowerCase());
             if (variant && typeof variant.stock !== 'undefined') limitStock = variant.stock;
         } else {
-            const variant = product.variants.find(v => itemTargetName.includes(v.weight));
+            const variant = product.variants.find(v => itemTargetName.includes(String(v.weight)));
             if (variant && typeof variant.stock !== 'undefined') limitStock = variant.stock;
         }
     }

@@ -75,9 +75,8 @@ exports.placeOrder = async (req, res) => {
 
       items.push({
         productId,
-        name: item.name || product.name,
-        category: item.category || product.category || 'Bakery',
-        image: item.image || (product.img || (Array.isArray(product.images) && product.images[0] && product.images[0].url) || '/placeholder.svg'),
+        variantId: matchedVariantEarly ? matchedVariantEarly._id : null,
+        name: requestedVariantName,
         price,
         quantity,
         lineTotal: price * quantity,
@@ -101,14 +100,8 @@ exports.placeOrder = async (req, res) => {
         }
 
         let matchedVariant = null;
-        if (prod.variants && prod.variants.length > 0 && it.name) {
-            const match = String(it.name).match(/\(([^,]+),\s*([^)]+)\)$/);
-            if (match) {
-                const searchWeight = match[2].trim();
-                matchedVariant = prod.variants.find(v => String(v.weight).toLowerCase() === searchWeight.toLowerCase());
-            } else {
-                matchedVariant = prod.variants.find(v => String(it.name).includes(v.weight));
-            }
+        if (it.variantId && prod.variants && prod.variants.length > 0) {
+            matchedVariant = prod.variants.id(it.variantId);
         }
 
         // Validate constraint levels securely
@@ -155,8 +148,11 @@ exports.placeOrder = async (req, res) => {
       return res.status(500).json({ error: 'Failed to create order' });
     }
 
-    const order = createdOrder[0];
-
+    const order = createdOrder[0].toObject();
+    // Add virtual names for frontend compatibility if productId is populated (it won't be here yet as it's fresh created)
+    // but we can just use the product from the current loop context if we wanted.
+    // For now, let's keep it simple as the client likely refreshes or we can populate it.
+    
     return res.status(201).json({
       message: 'Order placed successfully',
       order: {
@@ -192,7 +188,40 @@ exports.listMyOrders = async (req, res) => {
       return res.status(403).json({ error: 'Only customers can view checkout orders' });
     }
 
-    const orders = await CheckoutOrder.find({ customerId: req.user.id }).sort({ createdAt: -1 });
+    const ordersRaw = await CheckoutOrder.find({ customerId: req.user.id })
+      .populate({
+        path: 'items.productId',
+        populate: { path: 'variants.weight' }
+      })
+      .sort({ createdAt: -1 });
+
+    const orders = ordersRaw.map(order => {
+      const o = order.toObject();
+      o.items = o.items.map(item => {
+        const product = item.productId || {};
+        const productName = product.name || 'Bakery Item';
+        
+        let displayName = item.name;
+        if (!displayName) {
+          if (item.variantId && product.variants) {
+            const v = product.variants.id(item.variantId);
+            const weightVal = v?.weight ? (v.weight.name || v.weight.weight || '') : '';
+            displayName = weightVal ? `${productName} (${weightVal})` : productName;
+          } else {
+            displayName = productName;
+          }
+        }
+
+        return {
+          ...item.toObject ? item.toObject() : item,
+          name: displayName,
+          category: product.category || 'Bakery',
+          image: product.img || (product.images?.[0]?.url) || '/placeholder.svg'
+        };
+      });
+      return o;
+    });
+
     return res.json({ orders });
   } catch (error) {
     console.error('List Checkout Orders Error:', error);
@@ -206,7 +235,40 @@ exports.listAllOrders = async (req, res) => {
       return res.status(403).json({ error: 'Only admins can view all checkout orders' });
     }
 
-    const orders = await CheckoutOrder.find().sort({ createdAt: -1 });
+    const ordersRaw = await CheckoutOrder.find()
+      .populate({
+        path: 'items.productId',
+        populate: { path: 'variants.weight' }
+      })
+      .sort({ createdAt: -1 });
+
+    const orders = ordersRaw.map(order => {
+      const o = order.toObject();
+      o.items = o.items.map(item => {
+        const product = item.productId || {};
+        const productName = product.name || 'Bakery Item';
+        
+        let displayName = item.name;
+        if (!displayName) {
+          if (item.variantId && product.variants) {
+            const v = product.variants.id(item.variantId);
+            const weightVal = v?.weight ? (v.weight.name || v.weight.weight || '') : '';
+            displayName = weightVal ? `${productName} (${weightVal})` : productName;
+          } else {
+            displayName = productName;
+          }
+        }
+
+        return {
+          ...item.toObject ? item.toObject() : item,
+          name: displayName,
+          category: product.category || 'Bakery',
+          image: product.img || (product.images?.[0]?.url) || '/placeholder.svg'
+        };
+      });
+      return o;
+    });
+
     return res.json({ orders });
   } catch (error) {
     console.error('List All Checkout Orders Error:', error);
@@ -292,15 +354,9 @@ exports.updateOrderStatus = async (req, res) => {
              if (!prod) continue;
 
              let matchedVariant = null;
-             if (prod.variants && prod.variants.length > 0 && it.name) {
-                  const match = String(it.name).match(/\(([^,]+),\s*([^)]+)\)$/);
-                  if (match) {
-                      const searchWeight = match[2].trim();
-                      matchedVariant = prod.variants.find(v => String(v.weight).toLowerCase() === searchWeight.toLowerCase());
-                  } else {
-                      matchedVariant = prod.variants.find(v => String(it.name).includes(v.weight));
-                  }
-              }
+             if (it.variantId && prod.variants && prod.variants.length > 0) {
+                 matchedVariant = prod.variants.id(it.variantId);
+             }
 
              if (matchedVariant) {
                  matchedVariant.stock = Number(matchedVariant.stock) + it.quantity;

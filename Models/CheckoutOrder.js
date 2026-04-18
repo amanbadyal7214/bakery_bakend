@@ -3,9 +3,8 @@ const mongoose = require('mongoose');
 const CheckoutOrderItemSchema = new mongoose.Schema(
   {
     productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
-    name: { type: String, required: true },
-    category: { type: String, default: 'Bakery' },
-    image: { type: String, default: '/placeholder.svg' },
+    variantId: { type: mongoose.Schema.Types.ObjectId }, // Reference to variant _id in Product.variants
+    name: { type: String, required: true }, // Store snapshot of name with variant details
     price: { type: Number, required: true, min: 0 },
     quantity: { type: Number, required: true, min: 1 },
     lineTotal: { type: Number, required: true, min: 0 },
