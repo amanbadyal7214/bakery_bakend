@@ -12,7 +12,7 @@ exports.createOccasion = async (req, res, next) => {
       name, 
       description, 
       categories: categories || [],
-      suboccasions: subs
+      subOccasions: subs
     });
     await occasion.save();
     res.status(201).json(occasion);
@@ -54,7 +54,7 @@ exports.updateOccasion = async (req, res, next) => {
     const update = { name, description, categories: categories || [] };
     const incomingSubs = suboccasions || subOccasions;
     if (Array.isArray(incomingSubs)) {
-      update.suboccasions = incomingSubs.map(s => String(s || '').trim()).filter(Boolean);
+      update.subOccasions = incomingSubs.map(s => String(s || '').trim()).filter(Boolean);
     }
 
     const occasion = await Occasion.findByIdAndUpdate(
