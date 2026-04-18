@@ -12,7 +12,7 @@ exports.createTheme = async (req, res, next) => {
       name, 
       description, 
       categories: categories || [],
-      subthemes: subs
+      subThemes: subs
     });
     await theme.save();
     res.status(201).json(theme);
@@ -54,7 +54,7 @@ exports.updateTheme = async (req, res, next) => {
     const update = { name, description, categories: categories || [] };
     const incomingSubs = subthemes || subThemes;
     if (Array.isArray(incomingSubs)) {
-      update.subthemes = incomingSubs.map(s => String(s || '').trim()).filter(Boolean);
+      update.subThemes = incomingSubs.map(s => String(s || '').trim()).filter(Boolean);
     }
 
     const theme = await Theme.findByIdAndUpdate(

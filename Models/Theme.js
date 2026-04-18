@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const themeSchema = new mongoose.Schema({
   name: { type: String, required: true, unique: true },
   description: { type: String },
-  subthemes: { type: [String], default: [] },
+  subThemes: { type: [String], default: [] },
   categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
 }, { timestamps: true });
 
