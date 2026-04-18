@@ -7,14 +7,27 @@ const EventHighlightSchema = new mongoose.Schema({
 });
 
 const EventOfferSchema = new mongoose.Schema({
-  productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
+  productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' }, // Reference to Product model
   badge: String,
-  name: String,
-  price: String,
-  originalPrice: String,
-  discount: String,
-  image: String,
+  name: String, // Optional, can be removed if fetched dynamically
+  price: String, // Optional, can be removed if fetched dynamically
+  originalPrice: String, // Optional, can be removed if fetched dynamically
+  discount: String, // Optional, can be removed if fetched dynamically
+  image: String, // Optional, can be removed if fetched dynamically
   emoji: String,
+}, {
+  toObject: { virtuals: true },
+  toJSON: { virtuals: true },
+});
+
+// Virtual field to calculate discounted price dynamically
+EventOfferSchema.virtual('discountedPrice').get(function () {
+  if (this.discount && this.originalPrice) {
+    const discountValue = parseFloat(this.discount.replace('%', '')) / 100;
+    const originalPriceValue = parseFloat(this.originalPrice);
+    return (originalPriceValue * (1 - discountValue)).toFixed(2);
+  }
+  return null;
 });
 
 const EventSchema = new mongoose.Schema({
