@@ -258,23 +258,32 @@ exports.updateStock = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { stock, reason } = req.body;
-    const product = await Product.findByIdAndUpdate(id, {
-      stock,
-      lastStockAdjustmentReason: reason
-    }, { new: true });
 
-    if (!product) return res.status(404).json({ error: 'Product not found' });
+    const existing = await Product.findById(id);
+    if (!existing) return res.status(404).json({ error: 'Product not found' });
 
-    // Log adjustment
+    const oldStock = Number(existing.stock) || 0;
+    const newStock = Number(stock);
+    const difference = newStock - oldStock;
+
+    existing.stock = newStock;
+    existing.lastStockAdjustmentReason = reason || 'Manual adjustment';
+    await existing.save();
+
+    // Log adjustment - all fields required by StockAdjustment model
     const adjustment = new StockAdjustment({
       productId: id,
-      newStock: stock,
+      productName: existing.name,
+      oldStock,
+      newStock,
+      difference,
       reason: reason || 'Manual adjustment'
     });
     await adjustment.save();
 
-    res.json({ data: product });
+    res.json({ data: existing });
   } catch (err) {
+    console.error('productController.updateStock error:', err);
     res.status(400).json({ error: err.message });
   }
 };
